@@ -210,6 +210,8 @@ Priority inside the always block: **RESET > LOAD > SHIFT**. On reset, `tx_shift`
 
 ### 7.6 `tdm_top`
 
+![tdm_top block diagram](image/tdm_top.png)
+
 | Port | Direction | Width | Description |
 |---|---|---|---|
 | `clk`, `rst` | Input | 1-bit | Shared clock, synchronous active-high reset |
