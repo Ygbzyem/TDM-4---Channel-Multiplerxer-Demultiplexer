@@ -7,3 +7,4 @@ rtl_output.txt
 # Python cache
 __pycache__/
 *.pyc
+sim_xsim
