@@ -1,129 +1,208 @@
-import os
+"""Compare the RTL simulation results with the Python golden model.
 
-import golden_model
+For EVERY test vector in the input .hex file this script checks:
 
-from timing_checker import(
-    check_frame_length
-)
+  1. BIT STREAM  - the 32 bits the RTL put on TDM_DATA (one full frame,
+                   captured from bit_count == 0) equal, cycle by cycle,
+                   the stream produced by golden_model.serialize().
+  2. OUTPUTS     - the settled CH0_OUT..CH3_OUT written by the RTL equal the
+                   channels the golden model recovers.
+  3. LATENCY     - the latency measured by the RTL testbench is inside the
+                   architecture's worst-case bound (latency_checker.py).
 
-from latency_checker import(
-    report_latency
-)
+Inputs  (written by techbench/tb_tdm_top_filebased.v):
+    verification_logs/rtl_output_<tag>.hex
+    verification_logs/rtl_stream_<tag>.txt
+    verification_logs/rtl_latency_<tag>.txt
+Output: verification_logs/verification_report[_<tag>].md   (real results)
 
-from report_generator import(
-    write_report
-)
+Works from any directory. Exit code: 0 = all PASS, 1 = at least one FAIL.
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+from golden_model import TDMGoldenModel
+from timing_checker import check_frame_length
+from latency_checker import check_latency, report_latency
+from report_generator import write_report
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+LOGS = HERE / "verification_logs"
+DEFAULT_INPUT = ROOT / "input" / "input_vectors.hex"
 
 
-def read_rtl_output(filename):
+def default_paths(input_file):
+    """Result-file names for a given input file (input_vectors.hex keeps the
+    original committed names; any other file gets its own <stem> tag)."""
 
-    with open(
-        filename,
-        "r"
-    ) as f:
+    input_file = Path(input_file)
+    tag = "vectors" if input_file.name == "input_vectors.hex" else input_file.stem
 
-        lines = [
-            line.strip()
-            for line in f.readlines()
-            if line.strip()
-        ]
+    return {
+        "hex": LOGS / f"rtl_output_{tag}.hex",
+        "stream": LOGS / f"rtl_stream_{tag}.txt",
+        "lat": LOGS / f"rtl_latency_{tag}.txt",
+        "report": LOGS / (
+            "verification_report.md" if tag == "vectors"
+            else f"verification_report_{tag}.md"
+        ),
+    }
 
+
+def read_lines(path):
+    path = Path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Cannot find {path}\n"
+            "  -> run the RTL simulation first "
+            "(python golden_model/run_verification.py)"
+        )
+
+    lines = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("//")[0].strip()      # same comment style as $readmemh
+        if line:
+            lines.append(line)
     return lines
 
 
-def compare_hex_frame(
-    rtl_bits,
-    ch0,
-    ch1,
-    ch2,
-    ch3
-):
-
-    gm = golden_model.TDMGoldenModel()
-
-    result = gm.run_frame(
-        ch0,
-        ch1,
-        ch2,
-        ch3
+def split_channels(word):
+    return (
+        (word >> 24) & 0xFF,
+        (word >> 16) & 0xFF,
+        (word >> 8) & 0xFF,
+        word & 0xFF,
     )
 
-    golden_stream = result["stream"]
 
-    rtl_stream = [
-        int(bit)
-        for bit in rtl_bits
-    ]
+def compare_vector(index, in_hex, rtl_stream, rtl_out, latency, gm):
+    """Compare ONE vector against the golden model. Returns a result dict."""
 
-    check_frame_length(
-        golden_stream
+    chs = split_channels(int(in_hex, 16))
+    golden = gm.run_frame(*chs)
+    golden_stream = golden["stream"]
+
+    # --- 1) bit stream, cycle by cycle -------------------------------
+    bad_cycle = None
+    expected_bit = actual_bit = None
+
+    if not check_frame_length(golden_stream, verbose=False):
+        bad_cycle = 0                          # golden model itself is broken
+
+    for cycle in range(max(len(golden_stream), len(rtl_stream))):
+        exp = str(golden_stream[cycle]) if cycle < len(golden_stream) else "<none>"
+        act = rtl_stream[cycle] if cycle < len(rtl_stream) else "<none>"
+        if exp != act:
+            bad_cycle, expected_bit, actual_bit = cycle, exp, act
+            break
+
+    # --- 2) settled outputs ------------------------------------------
+    golden_out = "{:02x}{:02x}{:02x}{:02x}".format(
+        golden["ch0_out"], golden["ch1_out"], golden["ch2_out"], golden["ch3_out"]
     )
+    out_ok = rtl_out.lower() == golden_out
 
-    expected_frame = (
-        (ch0 << 24)
-        | (ch1 << 16)
-        | (ch2 << 8)
-        | ch3
-    )
+    stream_ok = bad_cycle is None
 
-    actual_frame = int(
-        rtl_bits,
-        2
-    )
+    return {
+        "index": index,
+        "input": in_hex.lower(),
+        "stream_ok": stream_ok,
+        "bad_cycle": bad_cycle,
+        "expected_bit": expected_bit,
+        "actual_bit": actual_bit,
+        "out_ok": out_ok,
+        "golden_out": golden_out,
+        "rtl_out": rtl_out.lower(),
+        "latency": latency,
+        "ok": stream_ok and out_ok,
+    }
 
-    print(
-        "\n=== HEX FRAME CHECK ==="
-    )
 
-    print(
-        f"Expected : 0x{expected_frame:08X}"
-    )
+def run_comparison(input_file, hex_file, stream_file, lat_file, report_file):
+    """Returns True when every check passes."""
 
-    print(
-        f"RTL      : 0x{actual_frame:08X}"
-    )
+    inputs = read_lines(input_file)
+    outs = read_lines(hex_file)
+    streams = read_lines(stream_file)
+    lats = [int(x) for x in read_lines(lat_file)]
 
-    if expected_frame == actual_frame:
+    n = len(inputs)
+    if not (len(outs) == len(streams) == len(lats) == n):
+        print("\n[FAIL] result files do not have the same number of lines as the input:")
+        print(f"  input vectors : {n}")
+        print(f"  rtl_output    : {len(outs)}")
+        print(f"  rtl_stream    : {len(streams)}")
+        print(f"  rtl_latency   : {len(lats)}")
+        print("  -> re-run the simulation (the run may have been cut short).")
+        return False
 
-        print("PASS")
+    gm = TDMGoldenModel()
 
-        report_latency()
+    print("\n" + "=" * 62)
+    print(" RTL vs GOLDEN MODEL")
+    print("=" * 62)
+    print(f" input vectors : {input_file}")
+    print(f" vectors       : {n}\n")
 
-        write_report(
-            "verification_report.txt",
-            actual_frame,
-            expected_frame,
-            len(golden_stream),
-            1000
+    results = []
+    for i in range(n):
+        r = compare_vector(i, inputs[i], streams[i], outs[i], lats[i], gm)
+        results.append(r)
+
+        tag = "PASS" if r["ok"] else "FAIL"
+        print(
+            f"[{tag}] #{i:<3} in={r['input']}  "
+            f"stream={'OK' if r['stream_ok'] else 'BAD'}  "
+            f"out={'OK' if r['out_ok'] else 'BAD'}  "
+            f"latency={r['latency']}"
         )
+        if not r["stream_ok"]:
+            print(f"        first wrong cycle {r['bad_cycle']}: "
+                  f"golden={r['expected_bit']} rtl={r['actual_bit']}")
+        if not r["out_ok"]:
+            print(f"        CHx_OUT golden={r['golden_out']} rtl={r['rtl_out']}")
 
-        return True
+    latency = check_latency(lats)
+    report_latency(latency)
 
-    print("FAIL")
+    passed = sum(1 for r in results if r["ok"])
+    all_pass = (passed == n) and latency["ok"]
 
-    return False
+    print("\n" + "=" * 62)
+    print(f" vectors passed : {passed}/{n}")
+    print(f" latency check  : {'PASS' if latency['ok'] else 'FAIL'}")
+    print("=" * 62)
+    print(">>> ALL CHECKS PASSED" if all_pass else ">>> VERIFICATION FAILED")
 
-
-def main():
-
-    rtl_file = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "rtl_output.txt"
+    write_report(
+        report_file,
+        {
+            "input_file": Path(input_file).name,
+            "results": results,
+            "latency": latency,
+            "all_pass": all_pass,
+        },
     )
+    print(f"\nReport written: {report_file}")
 
-    rtl_frames = read_rtl_output(
-        rtl_file
-    )
+    return all_pass
 
-    compare_hex_frame(
-        rtl_frames[0],
-        0xA5,
-        0x3C,
-        0xF0,
-        0x5A
-    )
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--vectors", default=str(DEFAULT_INPUT),
+                    help="input .hex file the RTL was simulated with")
+    args = ap.parse_args(argv)
+
+    p = default_paths(args.vectors)
+    ok = run_comparison(args.vectors, p["hex"], p["stream"], p["lat"], p["report"])
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

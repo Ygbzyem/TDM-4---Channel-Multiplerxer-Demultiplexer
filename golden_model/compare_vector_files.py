@@ -1,4 +1,20 @@
+"""Quick check of the settled outputs only (no bit stream, no latency).
+
+For every input vector, the expected output is what the golden model
+recovers; it is compared with the line the RTL testbench wrote to
+rtl_output_vectors.hex. Use compare_output.py for the complete check.
+
+Works from any directory. Exit code: 0 = all PASS, 1 = at least one FAIL.
+"""
+
+import argparse
+import sys
 from pathlib import Path
+
+from golden_model import TDMGoldenModel
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
 
 
 def read_hex_file(filename):
@@ -8,141 +24,50 @@ def read_hex_file(filename):
         raise FileNotFoundError(f"Cannot find file: {filename}")
 
     with open(path, "r") as f:
-        return [
-            line.strip().lower()
-            for line in f
-            if line.strip()
-        ]
+        return [line.split("//")[0].strip().lower() for line in f if line.split("//")[0].strip()]
+
+
+def golden_expected(in_hex):
+    word = int(in_hex, 16)
+    r = TDMGoldenModel().run_frame(
+        (word >> 24) & 0xFF, (word >> 16) & 0xFF, (word >> 8) & 0xFF, word & 0xFF
+    )
+    return "{:02x}{:02x}{:02x}{:02x}".format(
+        r["ch0_out"], r["ch1_out"], r["ch2_out"], r["ch3_out"]
+    )
 
 
 def compare_files(input_file, output_file):
+    inputs = read_hex_file(input_file)
+    actual = read_hex_file(output_file)
 
-    expected_vectors = read_hex_file(input_file)
-    actual_vectors = read_hex_file(output_file)
-
-    print("\n" + "=" * 60)
-    print("FILE-BASED RTL COMPARISON")
-    print("=" * 60)
-
-    total_vectors = max(
-        len(expected_vectors),
-        len(actual_vectors)
-    )
-
+    total = max(len(inputs), len(actual))
     errors = 0
 
-    for i in range(total_vectors):
-
-        expected = (
-            expected_vectors[i]
-            if i < len(expected_vectors)
-            else "<missing>"
-        )
-
-        actual = (
-            actual_vectors[i]
-            if i < len(actual_vectors)
-            else "<missing>"
-        )
-
-        print(f"\nVECTOR #{i}")
-
-        print(
-            f"Expected : 0x{expected.upper()}"
-        )
-
-        print(
-            f"Actual   : 0x{actual.upper()}"
-        )
-
-        if expected == actual:
-
-            print("Result   : PASS")
-
-        else:
-
-            print("Result   : FAIL")
-
-            errors += 1
-
     print("\n" + "=" * 60)
-
-    print(
-        f"Total vectors : {total_vectors}"
-    )
-
-    print(
-        f"Passed        : {total_vectors - errors}"
-    )
-
-    print(
-        f"Failed        : {errors}"
-    )
-
+    print("FILE-BASED RTL vs GOLDEN MODEL (settled outputs)")
     print("=" * 60)
 
-    if errors == 0:
+    for i in range(total):
+        exp = golden_expected(inputs[i]) if i < len(inputs) else "<missing>"
+        act = actual[i] if i < len(actual) else "<missing>"
+        ok = exp == act
+        errors += 0 if ok else 1
+        print(f"[{'PASS' if ok else 'FAIL'}] #{i:<3} expected=0x{exp.upper()} actual=0x{act.upper()}")
 
-        print(
-            "\n>>> ALL VECTORS PASSED"
-        )
-
-        generate_report(
-            total_vectors,
-            errors
-        )
-
-    else:
-
-        print(
-            f"\n>>> {errors} VECTOR(S) FAILED"
-        )
+    print("=" * 60)
+    print(f"Total vectors : {total}   Passed : {total - errors}   Failed : {errors}")
+    print(">>> ALL VECTORS PASSED" if errors == 0 else f">>> {errors} VECTOR(S) FAILED")
+    return errors == 0
 
 
-def generate_report(
-    total_vectors,
-    errors
-):
-
-    report_file = (
-        Path(__file__).parent
-        / "verification_logs"
-        / "verification_report.md"
-    )
-
-    with open(
-        report_file,
-        "w"
-    ) as f:
-
-        f.write(
-            "# Verification Report\n\n"
-        )
-
-        f.write(
-            f"Total vectors: {total_vectors}\n\n"
-        )
-
-        f.write(
-            f"Passed: {total_vectors - errors}\n\n"
-        )
-
-        f.write(
-            f"Failed: {errors}\n\n"
-        )
-
-        f.write(
-            "Status: PASS\n"
-        )
-
-    print(
-        f"\nReport generated: {report_file}"
-    )
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--input", default=str(ROOT / "input" / "input_vectors.hex"))
+    ap.add_argument("--output", default=str(HERE / "verification_logs" / "rtl_output_vectors.hex"))
+    args = ap.parse_args(argv)
+    return 0 if compare_files(args.input, args.output) else 1
 
 
 if __name__ == "__main__":
-
-    compare_files(
-        "input/input_vectors.hex",
-        "golden_model/verification_logs/rtl_output_vectors.hex"
-    )
+    sys.exit(main())
