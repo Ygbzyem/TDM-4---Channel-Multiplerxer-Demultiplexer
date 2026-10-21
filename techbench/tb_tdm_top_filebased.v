@@ -42,10 +42,22 @@
 //     need to be hardcoded anywhere else - it is auto-detected at
 //     run time (see "auto-detect vector count" below).
 //
-// Output file format (default: golden_model/verification_logs/rtl_output.hex)
-//   - One line per input line, same packed-32-bit-hex format,
-//     holding {CH0_OUT, CH1_OUT, CH2_OUT, CH3_OUT} sampled after
-//     the vector has had time to fully settle.
+// Output files (default folder: golden_model/verification_logs/)
+//   OUT_HEX     rtl_output_vectors.hex   - one line per input line, same
+//               packed-32-bit-hex format, holding {CH0_OUT..CH3_OUT}
+//               sampled after the vector has had time to fully settle.
+//   OUT_STREAM  rtl_stream_vectors.txt   - one line per input line: the 32
+//               bits seen on TDM_DATA during one full frame that starts at
+//               bit_count==0 (first character = first bit on the wire).
+//               This is what the Python golden model compares bit-by-bit.
+//   OUT_LAT     rtl_latency_vectors.txt  - one integer per input line: clock
+//               cycles from applying the vector until ALL FOUR outputs
+//               equal it (-1 = never matched inside SETTLE_CYCLES). For
+//               vector 0 it is counted from reset release (cold start).
+//
+// Every path can be overridden at run time with plusargs (no recompile,
+// works in Icarus and in Vivado XSIM via -testplusarg):
+//   +INPUT=<file> +OUT_HEX=<file> +OUT_STREAM=<file> +OUT_LAT=<file>
 //
 // SETTLE_CYCLES is deliberately a multiple of 32 (1 frame = 32
 // clocks): this makes the sampling point land on the same
@@ -84,6 +96,13 @@ module tb_tdm_top_filebased;
     "input/input_vectors.hex";
     parameter OUTPUT_FILE =
     "golden_model/verification_logs/rtl_output_vectors.hex";
+    parameter STREAM_FILE =
+    "golden_model/verification_logs/rtl_stream_vectors.txt";
+    parameter LATENCY_FILE =
+    "golden_model/verification_logs/rtl_latency_vectors.txt";
+
+    // Effective paths (parameters above, optionally overridden by plusargs)
+    reg [8*512-1:0] in_path, hex_path, stream_path, lat_path;
 
     reg clk = 0;
     reg rst;
@@ -110,8 +129,27 @@ module tb_tdm_top_filebased;
     reg [31:0] vectors [0:MAX_VECTORS-1];
     integer    num_vectors;
     integer    idx;
-    integer    fd_out;
+    integer    fd_out, fd_stream, fd_lat;
     reg        found_end;
+
+    // 32-bit TDM_DATA frame capture (same technique as tb_tdm_top.v PART 2)
+    reg [31:0] captured_stream;
+    integer    k;
+
+    // Latency measurement: free-running cycle counter on the falling edge
+    // (so it never races with the posedge-driven DUT or the stimulus below)
+    integer    cyc = 0;
+    integer    t0;
+    integer    lat_val;
+    reg        watching = 1'b0;
+    reg [31:0] target;
+    always @(negedge clk) begin
+        cyc = cyc + 1;
+        if (watching && ({CH0_OUT, CH1_OUT, CH2_OUT, CH3_OUT} === target)) begin
+            lat_val  = cyc - t0 - 1;   // clock edges after the change edge
+            watching = 1'b0;
+        end
+    end
 
     reg [31:0] expected, actual;
     integer    checks, errors;
@@ -120,10 +158,19 @@ module tb_tdm_top_filebased;
         // -----------------------------------------------------
         // 1) load vectors from the .hex file
         // -----------------------------------------------------
+        in_path     = INPUT_FILE;
+        hex_path    = OUTPUT_FILE;
+        stream_path = STREAM_FILE;
+        lat_path    = LATENCY_FILE;
+        if ($value$plusargs("INPUT=%s",      in_path))     ;
+        if ($value$plusargs("OUT_HEX=%s",    hex_path))    ;
+        if ($value$plusargs("OUT_STREAM=%s", stream_path)) ;
+        if ($value$plusargs("OUT_LAT=%s",    lat_path))    ;
+
         for (idx = 0; idx < MAX_VECTORS; idx = idx + 1)
             vectors[idx] = 32'hxxxx_xxxx;   // sentinel: "not filled by the file"
 
-        $readmemh(INPUT_FILE, vectors);
+        $readmemh(in_path, vectors);
 
         // auto-detect vector count: stop at the first still-unfilled
         // (all-X) entry, so the file's own length drives the loop -
@@ -138,17 +185,20 @@ module tb_tdm_top_filebased;
         end
 
         if (num_vectors == 0) begin
-            $display("[filebased-tb] ERROR: no vectors read from %s (missing/empty file, or MAX_VECTORS too small)", INPUT_FILE);
+            $display("[filebased-tb] ERROR: no vectors read from %0s (missing/empty file, or MAX_VECTORS too small)", in_path);
             $finish;
         end
-        $display("[filebased-tb] loaded %0d test vector(s) from %s", num_vectors, INPUT_FILE);
+        $display("[filebased-tb] loaded %0d test vector(s) from %0s", num_vectors, in_path);
 
         // -----------------------------------------------------
         // 2) open the result file
         // -----------------------------------------------------
-        fd_out = $fopen(OUTPUT_FILE, "w");
-        if (fd_out == 0) begin
-            $display("[filebased-tb] ERROR: cannot open %s for writing", OUTPUT_FILE);
+        fd_out    = $fopen(hex_path,    "w");
+        fd_stream = $fopen(stream_path, "w");
+        fd_lat    = $fopen(lat_path,    "w");
+        if (fd_out == 0 || fd_stream == 0 || fd_lat == 0) begin
+            $display("[filebased-tb] ERROR: cannot open an output file (%0s | %0s | %0s)",
+                      hex_path, stream_path, lat_path);
             $finish;
         end
 
@@ -173,6 +223,8 @@ module tb_tdm_top_filebased;
         repeat (2) @(posedge clk);
         #1;
         rst = 0;
+        // vector 0 latency = cold start, counted from reset release
+        t0 = cyc; target = vectors[0]; lat_val = -1; watching = 1'b1;
 
         // -----------------------------------------------------
         // 4) drive every vector, one at a time: dump the settled
@@ -186,6 +238,9 @@ module tb_tdm_top_filebased;
            if (idx > 0)
             while (DUT.u_counter.bit_count != SYNC_BIT_COUNT[4:0]) @(posedge clk);
             {CH0, CH1, CH2, CH3} = vectors[idx];
+            if (idx > 0) begin
+                t0 = cyc; target = vectors[idx]; lat_val = -1; watching = 1'b1;
+            end
             repeat (SETTLE_CYCLES) @(posedge clk);
 
             actual   = {CH0_OUT, CH1_OUT, CH2_OUT, CH3_OUT};
@@ -193,6 +248,20 @@ module tb_tdm_top_filebased;
 
             $fdisplay(fd_out, "%08h", actual);
             $fflush(fd_out);   // visible on disk even if the run is paused before $finish
+            $fdisplay(fd_lat, "%0d", lat_val);
+            $fflush(fd_lat);
+
+            // capture one full 32-bit frame off the wire, starting exactly
+            // at bit_count==0 (same pattern as tb_tdm_top.v PART 2); the
+            // next iteration re-syncs to SYNC_BIT_COUNT before changing data
+            while (DUT.u_counter.bit_count !== 5'd0) @(posedge clk);
+            captured_stream = 32'h0;
+            for (k = 0; k < 32; k = k + 1) begin
+                captured_stream = {captured_stream[30:0], TDM_DATA};
+                @(posedge clk);
+            end
+            $fdisplay(fd_stream, "%b", captured_stream);
+            $fflush(fd_stream);
 
             checks = checks + 1;
             if (actual !== expected) begin
@@ -205,13 +274,15 @@ module tb_tdm_top_filebased;
         end
 
         $fclose(fd_out);
+        $fclose(fd_stream);
+        $fclose(fd_lat);
         $display("======================================================");
         $display(" [filebased-tb] TONG KET: %0d vector, %0d loi", checks, errors);
         if (errors == 0) $display(" >>> TAT CA VECTOR PASSED (output khop input tung bit)");
         else              $display(" >>> CO %0d VECTOR FAILED - xem chi tiet [FAIL] phia tren", errors);
-        $display(" ket qua chi tiet da ghi vao: %s", OUTPUT_FILE);
+        $display(" ket qua chi tiet da ghi vao: %0s | %0s | %0s", hex_path, stream_path, lat_path);
         $display("======================================================");
         $finish;
     end
 
-endmodule
+endmodules
