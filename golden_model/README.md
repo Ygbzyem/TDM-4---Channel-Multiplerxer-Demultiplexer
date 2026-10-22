@@ -1,6 +1,7 @@
 # Golden model — how to run it
 
 The **golden model** is a tiny Python program that knows what the TDM system *should* do.
+It never looks at the Verilog. The RTL simulation (Vivado XSIM or Icarus) writes its results
 to files, and the Python scripts in this folder compare those files with what the golden
 model predicts.
 
