@@ -135,20 +135,24 @@ python golden_model\run_verification.py --sim xsim
 Results are written to `C:\tdm_verify\golden_model\verification_logs\`. Copy that folder's files
 into the repository if you want to commit them.
 
-## 7. Excel results workbook
+## 7. Excel results workbook (every run is appended)
 
-Every run also writes `verification_results.xlsx` next to the report (`--no-excel` to skip;
-needs `pip install openpyxl`, otherwise a hint is printed and the run continues):
+Every run also writes `verification_results.xlsx` next to the report (`--no-excel` to skip; needs
+`python -m pip install openpyxl`, otherwise a hint is printed and the run continues). **Running again
+adds the new run to the same file; nothing is overwritten.**
 
 | Sheet | Content |
 |---|---|
-| `Summary` | run date/time, input file, simulator (`--sim-label "Vivado 2020.2 XSIM"`), totals, pass rate, overall status, latency min / max / average in cycles and ns, latency chart |
-| `Results` | one row per vector: input, CH0..CH3, golden and RTL outputs, golden and RTL 32-bit streams, latency (cycles, ns), PASS/FAIL. All checks are Excel formulas; filters and colouring included |
-| `History` | one row appended per run, to compare runs over time |
+| `Summary` | the latest run (date/time, input, simulator via `--sim-label`, totals, pass rate, latency min / max / average in cycles and ns, latency chart) and the cumulative totals of all runs |
+| `Results` | one row per vector of **every** run: `Run #`, date/time, input file, CH0..CH3, golden and RTL outputs, golden and RTL 32-bit streams, latency (cycles, ns), PASS/FAIL. All checks are Excel formulas; filter by `Run #` to see a single run |
+| `History` | one row per run (date/time, input, vectors, passed, failed, latency, overall) |
 
-The clock period (10 ns, from `always #5 clk = ~clk` in the testbench) and the latency limit (41)
-are editable yellow cells on `Summary`. In Excel's Protected View click *Enable Editing* so the
-formulas calculate. The file is named after the input (`verification_results_<tag>.xlsx`).
+The clock period (10 ns, from `always #5 clk = ~clk` in the testbench) and the latency limit (41) are
+editable yellow cells on `Summary`; your edits are kept between runs. If the workbook is open in Excel
+when a run finishes, the results are saved to `verification_results_<date>_<time>.xlsx` instead. In Excel's
+Protected View click *Enable Editing* so the formulas calculate. The file is named after the input
+(`verification_results_<tag>.xlsx`; `input_vectors.hex` gives `verification_results.xlsx`). To start a
+fresh workbook, delete or rename the file.
 
 ## 8. What is compared, for every input vector
 

@@ -202,16 +202,28 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
             import export_excel
             summary = {"input_file": Path(input_file).name, "results": results,
                        "latency": latency, "all_pass": all_pass}
-            export_excel.write_excel(excel_file, summary, simulator)
-            print(f"Excel written : {excel_file}")
+            try:
+                written = export_excel.write_excel(excel_file, summary, simulator)
+            except PermissionError:
+                # usually the workbook is still open in Excel: save under a new name instead
+                from datetime import datetime
+                alt = Path(excel_file).with_name(
+                    f"{Path(excel_file).stem}_{datetime.now():%Y%m%d_%H%M%S}.xlsx")
+                print(f"Excel locked  : {excel_file} is open in Excel - saving to a new file")
+                written = export_excel.write_excel(alt, summary, simulator)
+            print(f"Excel written : {written}")
         except ImportError:
-            print("Excel skipped : install openpyxl to get the .xlsx workbook  ->  pip install openpyxl")
+            print("Excel skipped : openpyxl is not installed  ->  python -m pip install openpyxl")
+        except PermissionError:
+            print("Excel FAILED  : no permission to write the output folder")
+        except Exception as exc:                      # the Excel file must never break the verdict
+            print(f"Excel FAILED  : {type(exc).__name__}: {exc}")
 
     return all_pass
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--vectors", default=str(DEFAULT_INPUT),
                     help="input .hex file the RTL was simulated with")
     args = ap.parse_args(argv)
