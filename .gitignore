@@ -8,3 +8,18 @@ rtl_output.txt
 __pycache__/
 *.pyc
 sim_xsim
+
+# Vivado generated files
+*.jou
+*.log
+*.pb
+*.dcp
+webtalk*
+xsim.dir/
+.Xil/
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.ip_user_files/
+*.xpr
