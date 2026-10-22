@@ -211,7 +211,7 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vectors", default=str(DEFAULT_INPUT),
                     help="input .hex file the RTL was simulated with")
     args = ap.parse_args(argv)

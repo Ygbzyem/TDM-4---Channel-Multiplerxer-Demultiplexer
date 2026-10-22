@@ -223,7 +223,7 @@ def simulate(vectors, paths, which="auto"):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vectors", default=str(compare_output.DEFAULT_INPUT))
     ap.add_argument("--sim", choices=["auto", "iverilog", "xsim"], default="auto",
                     help="simulator to use (default: iverilog if installed, else Vivado xsim)")
