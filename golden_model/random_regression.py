@@ -1,3 +1,18 @@
+"""Random test vectors for the RTL regression.
+
+  python golden_model/random_regression.py --n 200 --seed 42
+
+writes input/random_vectors.hex (one packed {CH0,CH1,CH2,CH3} hex word per
+line, same format as input_vectors.hex). Feed it to the RTL and compare with
+the golden model:
+
+  python golden_model/run_verification.py --vectors input/random_vectors.hex
+
+The testbench holds at most MAX_VECTORS = 256 vectors.
+run_random_tests() below is only a self-test of the golden model itself
+(serialize -> deserialize); it never touches the RTL.
+"""
+
 import argparse
 import random
 from pathlib import Path
@@ -42,7 +57,7 @@ def run_random_tests(total_tests=1000):
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--n", type=int, default=200)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", default=str(ROOT / "input" / "random_vectors.hex"))

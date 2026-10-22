@@ -1,3 +1,21 @@
+"""Latency check based on values MEASURED by the RTL testbench.
+
+tb_tdm_top_filebased.v writes, per test vector, the number of clock cycles
+from "vector applied to CH0..CH3" until all four CHx_OUT equal it
+(file: verification_logs/rtl_latency_vectors.txt, -1 = never matched).
+
+Vector 0 is a cold start (counted from reset release); every later vector is
+a mid-stream change, applied at bit_count == SYNC_BIT_COUNT (24).
+
+MAX_LATENCY is the worst case of the architecture, not a magic number:
+    up to 31 cycles waiting for that channel's load slot (tx_shift_reg loads
+    each channel once per 32-cycle frame)
+  +  8 cycles to serialise the byte
+  +  2 cycles (rx byte_done register + tdm_demux output register)
+  = 41 cycles
+(verified by sweeping all 32 possible bit_count phases: min 34, max 41).
+"""
+
 MAX_LATENCY = 41
 
 

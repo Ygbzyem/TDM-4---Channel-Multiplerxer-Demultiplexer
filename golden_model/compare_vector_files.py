@@ -62,7 +62,7 @@ def compare_files(input_file, output_file):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--input", default=str(ROOT / "input" / "input_vectors.hex"))
     ap.add_argument("--output", default=str(HERE / "verification_logs" / "rtl_output_vectors.hex"))
     args = ap.parse_args(argv)

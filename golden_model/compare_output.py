@@ -45,6 +45,10 @@ def default_paths(input_file):
         "hex": LOGS / f"rtl_output_{tag}.hex",
         "stream": LOGS / f"rtl_stream_{tag}.txt",
         "lat": LOGS / f"rtl_latency_{tag}.txt",
+        "xlsx": LOGS / (
+            "verification_results.xlsx" if tag == "vectors"
+            else f"verification_results_{tag}.xlsx"
+        ),
         "report": LOGS / (
             "verification_report.md" if tag == "vectors"
             else f"verification_report_{tag}.md"
@@ -119,12 +123,15 @@ def compare_vector(index, in_hex, rtl_stream, rtl_out, latency, gm):
         "golden_out": golden_out,
         "rtl_out": rtl_out.lower(),
         "latency": latency,
+        "golden_stream": "".join(str(b) for b in golden_stream),
+        "rtl_stream": rtl_stream,
         "ok": stream_ok and out_ok,
     }
 
 
-def run_comparison(input_file, hex_file, stream_file, lat_file, report_file):
-    """Returns True when every check passes."""
+def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
+                   excel_file=None, simulator=""):
+    """Returns True when every check passes. excel_file: also write an .xlsx workbook."""
 
     inputs = read_lines(input_file)
     outs = read_lines(hex_file)
@@ -190,11 +197,21 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file):
     )
     print(f"\nReport written: {report_file}")
 
+    if excel_file:
+        try:
+            import export_excel
+            summary = {"input_file": Path(input_file).name, "results": results,
+                       "latency": latency, "all_pass": all_pass}
+            export_excel.write_excel(excel_file, summary, simulator)
+            print(f"Excel written : {excel_file}")
+        except ImportError:
+            print("Excel skipped : install openpyxl to get the .xlsx workbook  ->  pip install openpyxl")
+
     return all_pass
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--vectors", default=str(DEFAULT_INPUT),
                     help="input .hex file the RTL was simulated with")
     args = ap.parse_args(argv)

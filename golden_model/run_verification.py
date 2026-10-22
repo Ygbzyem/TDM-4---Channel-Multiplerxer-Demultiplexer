@@ -8,6 +8,7 @@ with the Python golden model.
     python golden_model/run_verification.py --no-sim         # compare existing result files
     python golden_model/run_verification.py --no-sim --vectors D:/x/input_vectors.hex --results D:/x
                                                              # result files live in another folder
+    python golden_model/run_verification.py --work D:/x      # same thing, short form for the Vivado GUI flow
 
 Works from any directory. Exit code: 0 = PASS, 1 = FAIL, 2 = tool/sim problem.
 
@@ -222,7 +223,7 @@ def simulate(vectors, paths, which="auto"):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--vectors", default=str(compare_output.DEFAULT_INPUT))
     ap.add_argument("--sim", choices=["auto", "iverilog", "xsim"], default="auto",
                     help="simulator to use (default: iverilog if installed, else Vivado xsim)")
@@ -230,9 +231,23 @@ def main(argv=None):
                     help="folder that holds (or will receive) rtl_output_*.hex, rtl_stream_*.txt, "
                          "rtl_latency_*.txt and the report; default: golden_model/verification_logs. "
                          "Use it when Vivado wrote the files outside the repository.")
+    ap.add_argument("--work", nargs="?", const="", metavar="DIR",
+                    help="shortcut for the Vivado GUI flow: same as --no-sim --vectors DIR/input_vectors.hex "
+                         "--results DIR. Without DIR it uses $TDM_WORK, else ~/TDM/verify")
+    ap.add_argument("--no-excel", action="store_true",
+                    help="do not write verification_results.xlsx (needs openpyxl)")
+    ap.add_argument("--sim-label", default=None, metavar="TEXT",
+                    help='text for the "Simulator / tool" cell in the Excel file, e.g. "Vivado 2020.2 XSIM"')
     ap.add_argument("--no-sim", action="store_true",
                     help="skip the simulation, only compare existing result files")
     args = ap.parse_args(argv)
+
+    if args.work is not None:
+        work = Path(args.work or os.environ.get("TDM_WORK") or Path.home() / "TDM" / "verify")
+        args.no_sim = True
+        args.results = str(work)
+        args.vectors = str(work / "input_vectors.hex")
+        print(f"Vivado GUI flow: comparing the files in {work}")
 
     vectors = Path(args.vectors).resolve()
     if not vectors.exists():
@@ -248,8 +263,18 @@ def main(argv=None):
     if not args.no_sim and not simulate(vectors, paths, args.sim):
         return 2
 
+    if args.sim_label:
+        label = args.sim_label
+    elif args.work is not None:
+        label = "Vivado XSIM (GUI run)"
+    elif args.no_sim:
+        label = "external simulation (result files supplied)"
+    else:
+        label = {"iverilog": "Icarus Verilog", "xsim": "Vivado XSIM"}.get(args.sim, "auto-detected simulator")
+
     ok = compare_output.run_comparison(
-        vectors, paths["hex"], paths["stream"], paths["lat"], paths["report"]
+        vectors, paths["hex"], paths["stream"], paths["lat"], paths["report"],
+        excel_file=None if args.no_excel else paths["xlsx"], simulator=label,
     )
     return 0 if ok else 1
 
