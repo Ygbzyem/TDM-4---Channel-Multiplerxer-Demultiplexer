@@ -6,6 +6,8 @@ with the Python golden model.
     python golden_model/run_verification.py --sim iverilog   # force Icarus Verilog
     python golden_model/run_verification.py --vectors input/random_vectors.hex
     python golden_model/run_verification.py --no-sim         # compare existing result files
+    python golden_model/run_verification.py --no-sim --vectors D:/x/input_vectors.hex --results D:/x
+                                                             # result files live in another folder
 
 Works from any directory. Exit code: 0 = PASS, 1 = FAIL, 2 = tool/sim problem.
 
@@ -16,6 +18,7 @@ C:\AMD\Vivado\*). Override with the environment variable VIVADO_BIN
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -146,10 +149,27 @@ def simulate_xsim(vectors, paths):
     # The RTL files carry no `timescale; give every file the testbench's 1ns/1ps
     # in a scratch copy so XSIM never mixes timescaled / un-timescaled files.
     # The repo files are not touched.
+    #
+    # File paths are written into the scratch copy of the testbench (its
+    # parameters) instead of being passed with -testplusarg: xsim.bat is a
+    # Windows batch wrapper and cmd.exe splits "NAME=C:/path" at '=' / ':',
+    # which makes xsim fail with "Expected a switch but found C".
+    param_paths = {"INPUT_FILE": vectors, "OUTPUT_FILE": paths["hex"],
+                   "STREAM_FILE": paths["stream"], "LATENCY_FILE": paths["lat"]}
     files = [TB] + sorted((ROOT / "src").glob("*.v"))
     local = []
     for f in files:
         text = f.read_text(encoding="utf-8", errors="replace")
+        if f == TB:
+            for name, val in param_paths.items():
+                text, n = re.subn(
+                    r'(parameter\s+' + name + r'\s*=\s*)"[^"]*"',
+                    lambda m, v=Path(val).as_posix(): m.group(1) + '"' + v + '"',
+                    text,
+                )
+                if n != 1:
+                    print(f"ERROR: could not patch parameter {name} in the testbench copy.")
+                    return False
         if "`timescale" not in text:
             text = "`timescale 1ns/1ps\n" + text
         dst = XSIM_DIR / f.name
@@ -172,11 +192,7 @@ def simulate_xsim(vectors, paths):
         _show(r)
         return False
 
-    plus = {"INPUT": vectors, "OUT_HEX": paths["hex"],
-            "OUT_STREAM": paths["stream"], "OUT_LAT": paths["lat"]}
     cmd = [xsim, "tdm_snap", "-R"]
-    for k, v in plus.items():
-        cmd += ["-testplusarg", f"{k}={Path(v).as_posix()}"]
     r = run(cmd, "[3/3] running simulation (xsim) ...")
     _print_summary(r.stdout)
     if r.returncode != 0 or "[filebased-tb] ERROR" in r.stdout:
@@ -210,6 +226,10 @@ def main(argv=None):
     ap.add_argument("--vectors", default=str(compare_output.DEFAULT_INPUT))
     ap.add_argument("--sim", choices=["auto", "iverilog", "xsim"], default="auto",
                     help="simulator to use (default: iverilog if installed, else Vivado xsim)")
+    ap.add_argument("--results", metavar="DIR",
+                    help="folder that holds (or will receive) rtl_output_*.hex, rtl_stream_*.txt, "
+                         "rtl_latency_*.txt and the report; default: golden_model/verification_logs. "
+                         "Use it when Vivado wrote the files outside the repository.")
     ap.add_argument("--no-sim", action="store_true",
                     help="skip the simulation, only compare existing result files")
     args = ap.parse_args(argv)
@@ -220,6 +240,10 @@ def main(argv=None):
         return 2
 
     paths = compare_output.default_paths(vectors)
+    if args.results:
+        res = Path(args.results).resolve()
+        res.mkdir(parents=True, exist_ok=True)
+        paths = {k: res / v.name for k, v in paths.items()}
 
     if not args.no_sim and not simulate(vectors, paths, args.sim):
         return 2
