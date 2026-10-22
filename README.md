@@ -298,7 +298,7 @@ Primitive breakdown: 63 `FDRE` (all-synchronous design, no latches), 15 `LUT6` +
 | Hold (WHS) | **+0.159 ns** | 0 | 104 |
 | Pulse width (WPWS) | **+4.600 ns** | 0 | 65 |
 
-![Vivado Design Timing Summary](image/timing_summary.png)
+![Vivado Design Timing Summary](results/timing_summary.png)
 
 Vivado reports: *All user specified timing constraints are met.* TNS, THS and TPWS are all 0.000 ns.
 
