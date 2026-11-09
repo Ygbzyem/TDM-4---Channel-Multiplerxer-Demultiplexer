@@ -290,6 +290,10 @@ Primitive breakdown: 63 `FDRE` (all-synchronous design, no latches), 15 `LUT6` +
 1 `LUT1`, 34 `IBUF` / 33 `OBUF`, and 1 `BUFG`. Bonded I/O is the dominant usage, which is expected with 4 × 8-bit inputs and
 4 × 8-bit outputs plus clock, reset and the serial pin; no BRAM or DSP is needed.
 
+The RTL declares 64 register bits (5 + 8 + 8 + 8 + 1 + 2 + 32), but Vivado reports 63 `FDRE`. `rx_shift[7]` is written but never read
+(only `rx_shift[6:0]` is used when the byte is latched), so the tool removes it. The post-implementation netlist confirms it:
+`get_cells -hierarchical -filter {NAME =~ *rx_shift_reg*}` lists only `u_rx/rx_shift_reg[0]` to `[6]`.
+
 ### Timing (Vivado *Design Timing Summary*, post-implementation, 10 ns / 100 MHz clock constraint)
 
 | Check | Worst slack | Failing endpoints | Endpoints |
