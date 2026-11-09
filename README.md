@@ -2,7 +2,7 @@
 
 A counter-driven (no FSM) **4-channel Time Division Multiplexing (TDM) multiplexer/demultiplexer** in
 Verilog, with self-checking testbenches, a Python golden model that cross-checks the RTL, and Vivado
-synthesis results.
+implementation results.
 
 | | |
 |---|---|
@@ -10,7 +10,7 @@ synthesis results.
 | System testbench | **38 / 38** checks pass (Icarus Verilog and Vivado XSIM), see [Section 8](#8-verification) |
 | Golden model | **200 / 200** random vectors match bit-for-bit (stream, outputs, latency), see [Section 8.3](#83-python-golden-model-rtl-vs-reference) |
 | Latency | 33 clocks from reset to first valid frame, 40 clocks (max 41) after a mid-stream data change |
-| Synthesis | Vivado 2020.2, Kintex-7 `xc7k70tfbv676-1`: **22 LUTs, 63 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.574 ns, WHS +0.159 ns), see [Section 9](#9-synthesis-results) |
+| Implementation | Vivado 2020.2 (post-implementation), Kintex-7 `xc7k70tfbv676-1`: **22 LUTs, 63 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.574 ns, WHS +0.159 ns), see [Section 9](#9-implementation-results) |
 
 ---
 
@@ -24,7 +24,7 @@ synthesis results.
 6. [Timing Contract (glue layer in `tdm_top`)](#6-timing-contract-glue-layer-in-tdm_top)
 7. [Interface Specifications](#7-interface-specifications)
 8. [Verification](#8-verification)
-9. [Synthesis Results](#9-synthesis-results)
+9. [Implementation Results](#9-implementation-results)
 10. [Limitations](#10-limitations)
 11. [Future Work](#11-future-work)
 12. [License](#12-license)
@@ -272,10 +272,10 @@ A mid-stream latency below 40 appears when a channel's byte equals the previous 
 
 ---
 
-## 9. Synthesis Results
+## 9. Implementation Results
 
-Utilization report exported from Vivado 2020.2 after synthesis, target device Kintex-7 `xc7k70tfbv676-1`
-(reproduce with `vivado -mode batch -source scripts/synth.tcl`):
+Utilization report exported from Vivado 2020.2 after implementation (place and route), target device Kintex-7 `xc7k70tfbv676-1`.
+The batch script `scripts/synth.tcl` runs the synthesis step only, so it does not reproduce the post-implementation numbers below:
 
 | Resource | Used | Available | Utilization |
 |---|---|---|---|
@@ -290,7 +290,7 @@ Primitive breakdown: 63 `FDRE` (all-synchronous design, no latches), 15 `LUT6` +
 1 `LUT1`, 34 `IBUF` / 33 `OBUF`, and 1 `BUFG`. Bonded I/O is the dominant usage, which is expected with 4 × 8-bit inputs and
 4 × 8-bit outputs plus clock, reset and the serial pin; no BRAM or DSP is needed.
 
-### Timing (Vivado *Design Timing Summary*, 10 ns / 100 MHz clock constraint)
+### Timing (Vivado *Design Timing Summary*, post-implementation, 10 ns / 100 MHz clock constraint)
 
 | Check | Worst slack | Failing endpoints | Endpoints |
 |---|---|---|---|
@@ -298,7 +298,7 @@ Primitive breakdown: 63 `FDRE` (all-synchronous design, no latches), 15 `LUT6` +
 | Hold (WHS) | **+0.159 ns** | 0 | 104 |
 | Pulse width (WPWS) | **+4.600 ns** | 0 | 65 |
 
-![Vivado Design Timing Summary](results/timing_summary.png)
+![Vivado Design Timing Summary](image/timing_summary.png)
 
 Vivado reports: *All user specified timing constraints are met.* TNS, THS and TPWS are all 0.000 ns.
 

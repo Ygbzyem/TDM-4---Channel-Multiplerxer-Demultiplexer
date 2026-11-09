@@ -118,8 +118,8 @@ vivado -mode batch -source scripts/synth.tcl
 ```
 
 Writes `results/utilization_synth.rpt` and `results/timing_synth.rpt` (target `xc7k70tfbv676-1`, the clock constraint in
-`constraint/constraints.xdc`). The numbers in the README come from the Vivado 2020.2 GUI flow; the script gives the same
-synthesis step in batch mode. Use an ASCII-only project path.
+`constraint/constraints.xdc`). The numbers in the README come from the Vivado 2020.2 GUI flow after implementation (place and route); the script
+only runs the synthesis step in batch mode and has not been run-tested here. Use an ASCII-only project path.
 
 ## 6. Troubleshooting
 
