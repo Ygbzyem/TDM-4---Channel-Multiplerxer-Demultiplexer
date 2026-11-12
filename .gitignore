@@ -23,3 +23,9 @@ xsim.dir/
 *.sim/
 *.ip_user_files/
 *.xpr
+sim_message/
+golden_model/verification_logs/message_cases/
+
+# Vivado project created inside the repository, local Python environment
+TDM/
+.venv/
