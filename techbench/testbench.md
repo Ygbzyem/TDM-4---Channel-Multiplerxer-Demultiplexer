@@ -29,7 +29,10 @@ always #5 clk = ~clk;
 
 `errors`/`checks` are simple running counters, printed at the very end as a pass/fail summary. `always #5 clk = ~clk;` is the clock generator — see the "How long is one clock cycle" section below for exactly what this means in nanoseconds.
 
-The DUT (`tdm_top`) is instantiated once, with all its ports connected by name (`.clk(clk)`, `.rst(rst)`, etc.) — nothing unusual here, this is a plain structural connection.
+The DUT (`tdm_top`) is instantiated once with the default parameters `NUM_CHANNELS = 4`, `DATA_WIDTH = 8`. Its ports are
+buses: the four input bytes are packed as `.ch_in({CH0, CH1, CH2, CH3})` (channel 0 = most significant byte, like the
+packed vectors in `input/*.hex`) and the outputs are unpacked the same way with `.ch_out({CH0_OUT, CH1_OUT, CH2_OUT, CH3_OUT})`, so the rest of the testbench still works with `CH0..CH3`.
+`DUT.u_counter.bit_count` (used in PART 2) is the frame position `{channel_select, bit_index}`, 0 to 31.
 
 ## The three helper tasks
 

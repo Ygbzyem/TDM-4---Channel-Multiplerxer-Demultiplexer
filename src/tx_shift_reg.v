@@ -1,24 +1,29 @@
-module tx_shift_reg (
-    input  wire       clk,
-    input  wire       rst,
-    input  wire [7:0] mux_out,
-    input  wire       load,
-    output wire       serial_out
+// =============================================================
+// Module      : tx_shift_reg
+// Function    : parallel-in serial-out, MSB first.
+//               Priority: reset, then load, then shift.
+// =============================================================
+module tx_shift_reg #(
+    parameter DATA_WIDTH = 8
+) (
+    input  wire                  clk,
+    input  wire                  rst,
+    input  wire [DATA_WIDTH-1:0] mux_out,
+    input  wire                  load,
+    output wire                  serial_out
 );
 
-    reg [7:0] tx_shift;
+    reg [DATA_WIDTH-1:0] tx_shift;
 
     always @(posedge clk) begin
         if (rst)
-            tx_shift <= mux_out;
+            tx_shift <= mux_out;                                // preload CH0 so it is sent first
         else if (load)
-            tx_shift <= mux_out;              // LOAD: parallel load new byte
+            tx_shift <= mux_out;                                // LOAD: parallel load of the next word
         else
-            tx_shift <= {tx_shift[6:0], 1'b0}; // SHIFT: shift left, MSB out first
+            tx_shift <= {tx_shift[DATA_WIDTH-2:0], 1'b0};       // SHIFT left, MSB goes out first
     end
 
-    // Combinational tap of current MSB -> stable for one full clock period
-    // following the edge that produced it (see spec: cycle model).
-    assign serial_out = tx_shift[7];
+    assign serial_out = tx_shift[DATA_WIDTH-1];
 
 endmodule
