@@ -1,15 +1,15 @@
 # TDM 4-Channel Multiplexer/Demultiplexer — Verilog RTL Project
 
-A counter-driven (no FSM) **4-channel Time Division Multiplexing (TDM) multiplexer/demultiplexer** in
-Verilog, with self-checking testbenches, a Python golden model that cross-checks the RTL, and Vivado
+A counter-driven (no FSM) **Time Division Multiplexing (TDM) multiplexer/demultiplexer** in Verilog,
+parameterized by the number of channels and the bits per slot (default 4 channels × 8 bits), with self-checking testbenches, a Python golden model that cross-checks the RTL, and Vivado
 implementation results.
 
 | | |
 |---|---|
 | Design | 6 RTL modules, 1 shared counter, parameterized `NUM_CHANNELS` × `DATA_WIDTH` (default 4 × 8) over a single `TDM_DATA` wire, see [Section 2.1](#21-parameters) |
 | System testbench | **38 / 38** checks pass (Icarus Verilog and Vivado XSIM), see [Section 8](#8-verification) |
-| Golden model | **200 / 200** random vectors match bit-for-bit (stream, outputs, latency), see [Section 8.3](#83-python-golden-model-rtl-vs-reference) |
-| Latency | 33 clocks from reset to first valid frame, 40 clocks (max 41) after a mid-stream data change (4 × 8); cold start = `NUM_CHANNELS × DATA_WIDTH + 1` in general |
+| Golden model | **200 / 200** random vectors match bit-for-bit (stream, outputs, latency) for 4 × 8, plus other sizes; **46 / 46** message cases (4 × 8, 4 × 16, 8 × 8, 3 × 12) give identical RTL and golden result files, see [Section 8.3](#83-python-golden-model-rtl-vs-reference) and [8.5](#85-message-mode-regression) |
+| Latency | 33 clocks from reset to first valid frame, 40 clocks (max 41) after a mid-stream data change (4 × 8); in general cold start `N·W + 1`, worst case `N·W + W + 1` |
 | Implementation | Vivado 2020.2 (post-implementation), Kintex-7 `xc7k70tfbv676-1`, default 4 × 8: **22 LUTs, 63 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.574 ns, WHS +0.159 ns), see [Section 9](#9-implementation-results) |
 
 ---
@@ -46,6 +46,7 @@ with Vivado.
 python scripts/run_tests.py                      # system testbench -> 38/38 PASS
 python golden_model/run_verification.py          # RTL vs Python golden model -> ALL CHECKS PASSED
 python golden_model/golden_model.py              # golden model of input/input_vectors.txt -> results/golden_result.txt
+python golden_model/run_message_regression.py    # many message cases, RTL vs golden result files -> 0 failures
 ```
 
 Add `--sim xsim` to either command to use Vivado XSIM instead of Icarus. The full guide, including
@@ -80,7 +81,8 @@ once the pipeline has filled.
 
 **Latency.** Outputs are not valid instantly: after reset the first correct frame is available after **33 clocks**;
 after a mid-stream change of the inputs it takes **40 clocks** (worst case 41 = 31 clocks waiting for the channel's
-load slot + 8 clocks to serialize + 2 output registers). These numbers are measured in simulation and checked by
+load slot + 8 clocks to serialize + 2 output registers). For `N` channels of `W` bits: cold start `N·W + 1`, worst case
+`(N·W − 1) + W + 2 = N·W + W + 1`. These numbers are measured in simulation and checked by
 the golden model ([Section 8.3](#83-python-golden-model-rtl-vs-reference)).
 
 ### 2.1 Parameters
@@ -124,7 +126,8 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 │   ├── tb_tdm_top_filebased.v   #   one case from input/input_vectors.txt (default), or the vector regression
 │   └── testbench.md             #   walkthrough of tb_tdm_top.v
 ├── golden_model/                # Python reference model + automatic RTL comparison (see its README)
-│   ├── run_verification.py      #   simulate + compare in one command
+│   ├── run_verification.py      #   vector regression: simulate + compare in one command (any N x W)
+│   ├── run_message_regression.py #  message regression: many cases, RTL vs golden result files
 │   ├── golden_model.py          #   reference model; run it to get results/golden_result.txt for input/input_vectors.txt
 │   ├── compare_output.py, export_excel.py, ...
 │   └── verification_logs/       #   latest result files, report and Excel workbook
@@ -227,24 +230,25 @@ differ between simulators from byte-identical source.
 
 ### 8.3 Python golden model (RTL vs reference)
 
-`techbench/tb_tdm_top_filebased.v` reads input vectors from `input/*.hex`, drives the real `tdm_top`, and writes three
-result files. `golden_model/run_verification.py` then compares **every vector** with the independent Python model
-([golden_model/README.md](golden_model/README.md)):
+`techbench/tb_tdm_top_filebased.v` (with `RUN_CASE = 0`) reads packed vectors `{CH0, CH1, …}` from `input/*.hex`,
+drives the real `tdm_top`, and writes three result files. `golden_model/run_verification.py` then compares **every
+vector** with the independent Python model ([golden_model/README.md](golden_model/README.md)). Any size:
+`--channels N --width W` (vectors from `random_regression.py --channels N --width W`).
 
 | Check | RTL side | Golden side |
 |---|---|---|
-| Bit stream | 32 bits on `TDM_DATA` of one frame, from `bit_count == 0` | `serialize()`, compared cycle by cycle |
-| Outputs | settled `CH0_OUT..CH3_OUT` | `deserialize()` result |
-| Latency | clocks until all four outputs are correct | bound `MAX_LATENCY = 41` |
+| Bit stream | N·W bits on `TDM_DATA` of one frame, from `bit_count == 0` | `serialize()`, compared cycle by cycle |
+| Outputs | settled channel outputs | `deserialize()` result |
+| Latency | clocks until every output is correct | bound `N·W + W + 1` (41 for 4 × 8) |
 
 | Run | Vectors | Result | Latency (cycles) |
 |---|---|---|---|
 | `input/input_vectors.hex` (hand-picked, corner values) | 20 | all PASS | cold start 33, mid-stream 40 |
 | `input/random_vectors.hex` (`--n 200 --seed 42`) | 200 | all PASS | cold start 33, mid-stream 32–40 |
+| random, 25 vectors each: 2 × 2, 3 × 12, 5 × 3, 7 × 9, 8 × 16, 4 × 32 | 150 | all PASS | cold start `N·W + 1`, every value ≤ `N·W + W + 1` |
 
 Each run also appends to `golden_model/verification_logs/verification_results.xlsx` (Summary / Results / History sheets).
 A mid-stream latency below 40 appears when a channel's byte equals the previous vector's byte, so that channel needs no update.
-This automatic flow checks the default 4 × 8 configuration.
 
 ### 8.4 One case, compared by eye
 
@@ -278,6 +282,15 @@ CH3 = 5a
 Each result file holds the messages and their slots, a cycle-by-cycle trace (time in ns, frame, channel and bit number
 on `TDM_DATA`, all outputs), every received slot with the cycle in which it reached its output, and the rebuilt
 messages. Which golden-model line corresponds to which RTL line is listed in [docs/golden_vs_rtl.md](docs/golden_vs_rtl.md).
+
+### 8.5 Message-mode regression
+
+`python golden_model/run_message_regression.py` runs the cases of `input/test_cases.txt` and random cases through the
+same testbench and through the golden model, and compares the two result files of every case line by line (only
+`# source` may differ) together with the testbench self-check. Options: `--sizes 4x8,4x16,8x8,3x12`, `--random N`,
+`--seed`, `--max-digits`, `--sim xsim`. Committed run (`verification_logs/message_report.md`, `message_results.xlsx`):
+the 6 library cases and 10 random cases each of 4 × 8, 4 × 16, 8 × 8 and 3 × 12, **46 / 46 PASS**. With the mux
+look-ahead removed on purpose every case fails at the first wrong bit on `TDM_DATA`.
 
 ---
 
@@ -330,7 +343,8 @@ are not part of this result. Keep the `.rpt` file of the run in `results/` as ev
 
 - **Channel order after a mid-stream data change is not fixed.** Adding four input buffer registers that update only when `bit_count` wraps to 0 would remove this.
 - **Rare edge cases are not covered yet:** back-to-back resets, a very short reset pulse, clock jitter. This only needs more test cases.
-- **Parameter range.** `NUM_CHANNELS` and `DATA_WIDTH` must both be at least 2. `tb_tdm_top_filebased.v` works for any size, but the Python comparison of `run_verification.py` (and the Excel export) still assumes 4 × 8; other sizes are checked with `run_single_case.py`.
+- **Parameter range.** `NUM_CHANNELS` and `DATA_WIDTH` must both be at least 2. `tb_tdm_top.v` (38 checks) is written for 4 × 8; every other size is checked by `tb_tdm_top_filebased.v` with `run_verification.py --channels --width` and `run_message_regression.py --sizes`. The testbench holds up to 256 vectors, 256 slots and 512 hex digits per message.
+- **XSIM in the Python regressions** is implemented like the existing `--sim xsim` flow but was only run with Icarus Verilog for the message mode.
 - **No error detection and no frame synchronization marker.** A parity bit per byte and a small marker detector are feasible additions.
 - **Out of scope:** CRC error detection and clock recovery / clock-domain crossing for a physically separate TX/RX clock.
 

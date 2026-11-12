@@ -30,9 +30,9 @@ devices that present the next slot every frame and collects what comes out. The 
 
 | Golden model (`golden_model.py`) | Testbench (`techbench/tb_tdm_top_filebased.v`) | What both do |
 |---|---|---|
-| L83–90 `message_slots()` | L374 `read_message_case`, L424 `word[W-1-b] = ... msg_bit(c, k) : 0` | Cut the hex message into W-bit slots, MSB first, last slot padded with 0 |
-| L92–95 `frames()`: `sl[f] if f < len(sl) else 0` | L434–440 `apply_frame`: `(f < n_slots[c]) ? slot_mem[...] : 0`; L521 next slot in the last cycle of a frame | Frame f carries slot f of every channel; a finished channel sends 0 |
-| L97–102 `rebuild_message()` | L500 collect the word from `ch_out`; L538 rebuild the message | Put the received slots of a channel back together |
+| L83–90 `message_slots()` | L424 `read_message_case`, L474 `word[W-1-b] = ... msg_bit(c, k) : 0` | Cut the hex message into W-bit slots, MSB first, last slot padded with 0 |
+| L92–95 `frames()`: `sl[f] if f < len(sl) else 0` | L484–490 `apply_frame`: `(f < n_slots[c]) ? slot_mem[...] : 0`; L571 next slot in the last cycle of a frame | Frame f carries slot f of every channel; a finished channel sends 0 |
+| L97–102 `rebuild_message()` | L550 collect the word from `ch_out`; L588 rebuild the message | Put the received slots of a channel back together |
 
 ## 2. Only in the RTL, and why
 

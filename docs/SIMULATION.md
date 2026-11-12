@@ -63,10 +63,18 @@ On Windows PowerShell replace `src/*.v` with `(Get-ChildItem src\*.v).FullName`.
 python golden_model/run_verification.py                       # the 20 vectors in input/input_vectors.hex
 python golden_model/random_regression.py --n 200 --seed 42    # create input/random_vectors.hex (200 random vectors)
 python golden_model/run_verification.py --vectors input/random_vectors.hex
+
+# another size: N x W bits per vector, same options for both scripts
+python golden_model/random_regression.py --n 50 --channels 8 --width 16
+python golden_model/run_verification.py --channels 8 --width 16 --vectors input/random_vectors_8x16.hex
+
+# message mode: the cases of input/test_cases.txt + random cases, RTL result file vs golden result file
+python golden_model/run_message_regression.py --sizes 4x8,4x16,8x8,3x12 --random 10
 ```
 
 Add `--sim xsim` to use Vivado. The script compiles `src/*.v` with `techbench/tb_tdm_top_filebased.v`, simulates, then
-compares every vector's 32-bit stream, settled outputs and latency with the golden model. Success looks like:
+compares every vector's bit stream (one frame, N·W bits), settled outputs and latency (limit N·W + W + 1) with the
+golden model. Success looks like:
 
 ```
  vectors passed : 20/20
@@ -94,7 +102,7 @@ For the file-driven testbench `techbench/tb_tdm_top_filebased.v` (golden model f
 
 1. Put the input file and the result files in an **ASCII-only working folder**, e.g. `C:/tdm_work`
    (`copy input\input_vectors.hex C:\tdm_work\`).
-2. In the testbench set the four path parameters to absolute paths with **forward slashes**. Relative paths are resolved
+2. In the testbench set `RUN_CASE = 0` (vector regression) and the four path parameters to absolute paths with **forward slashes**. Relative paths are resolved
    inside Vivado's `*.sim/sim_1/behav/xsim` folder, where the input does not exist (`ERROR: no vectors read`).
 
    ```verilog
