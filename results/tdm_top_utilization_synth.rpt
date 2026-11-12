@@ -1,13 +1,13 @@
 Copyright 1986-2020 Xilinx, Inc. All Rights Reserved.
----------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2020.2 (win64) Build 3064766 Wed Nov 18 09:12:45 MST 2020
-| Date         : Thu Oct 22 16:24:18 2026
+| Date         : Fri Nov 13 03:45:27 2026
 | Host         : AnhBaChaCu running 64-bit major release  (build 9200)
-| Command      : report_utilization -file tdm_top_utilization_synth.rpt -pb tdm_top_utilization_synth.pb
+| Command      : report_utilization -file C:/GitHub/TDM-4---Channel-Multiplerxer-Demultiplexer-/results/tdm_top_utilization_synth.rpt
 | Design       : tdm_top
 | Device       : 7k70tfbv676-1
 | Design State : Synthesized
----------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------
 
 Utilization Design Information
 
@@ -156,10 +156,10 @@ Table of Contents
 | OBUF     |   33 |                  IO |
 | LUT6     |   15 |                 LUT |
 | LUT3     |    6 |                 LUT |
-| LUT5     |    3 |                 LUT |
-| LUT4     |    2 |                 LUT |
-| LUT2     |    1 |                 LUT |
-| LUT1     |    1 |                 LUT |
+| LUT5     |    2 |                 LUT |
+| LUT2     |    2 |                 LUT |
+| LUT1     |    2 |                 LUT |
+| LUT4     |    1 |                 LUT |
 | BUFG     |    1 |               Clock |
 +----------+------+---------------------+
 
