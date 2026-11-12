@@ -1,0 +1,53 @@
+// ---- CASE 1: one slot per device (one byte each), 4 x 8 ----------------
+// Expected: CH0..CH3_OUT = a5, 3c, f0, 5a at cycles 9, 17, 25, 33
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8
+CH0 = a5
+CH1 = 3c
+CH2 = f0
+CH3 = 5a
+
+// ---- CASE 2: messages of different lengths, 1 byte per slot, 4 x 8 -----
+// CH0 has 8 slots, CH1 4, CH2 2, CH3 1; finished channels send 00
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8
+CH0 = 0123456789abcdef
+CH1 = deadbeef
+CH2 = cafe
+CH3 = 5a
+
+// ---- CASE 3: 2 bytes per slot, 4 x 16 (set DATA_WIDTH = 16 in the testbench)
+// CH3 = 5a has 8 bits only: its single slot is padded with 0 (5a00)
+NUM_CHANNELS = 4
+DATA_WIDTH   = 16
+CH0 = 0123456789abcdef
+CH1 = deadbeef
+CH2 = cafe
+CH3 = 5a
+
+// ---- CASE 4: corner values, all 0 and all 1, 4 x 8 ----------------------
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8
+CH0 = 00000000
+CH1 = ffffffff
+CH2 = 0f0f0f0f
+CH3 = f0f0f0f0
+
+// ---- CASE 5: eight devices, 8 x 8 (set NUM_CHANNELS = 8 in the testbench)
+NUM_CHANNELS = 8
+DATA_WIDTH   = 8
+CH0 = 0123
+CH1 = 4567
+CH2 = 89ab
+CH3 = cdef
+CH4 = 1122
+CH5 = 3344
+CH6 = 5566
+CH7 = 7788
+
+// ---- CASE 6: non power of two, 3 x 12 (set NUM_CHANNELS = 3, DATA_WIDTH = 12)
+NUM_CHANNELS = 3
+DATA_WIDTH   = 12
+CH0 = abcdef123
+CH1 = 456
+CH2 = 789abc
