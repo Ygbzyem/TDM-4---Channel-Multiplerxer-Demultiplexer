@@ -335,31 +335,81 @@ module tb_tdm_top_filebased;
     // REPO_DIR left at ".": look for input/input_vectors.txt in the current
     // folder and up to 6 folders above it. A Vivado project inside the
     // repository simulates in <project>/<project>.sim/sim_1/behav/xsim,
-    // 5 folders below the repository.
+    // 5 folders below the repository. The files are opened here with
+    // string literals (not with a path copied into a wide reg), which every
+    // simulator accepts; read_message_case / run_message_case use these
+    // descriptors. An absolute REPO_DIR is opened through the constant
+    // CASE_FILE / TRACE_FILE in the same way (see the main initial block).
+    integer case_fd_pre  = 0;
+    integer trace_fd_pre = 0;
     task find_repo_dir;
         integer up, fd_t;
-        reg [8*64-1:0] cand_in, cand_out;
         begin
             fd_t = 0;
             for (up = 0; up <= 6 && fd_t == 0; up = up + 1) begin
                 case (up)
-                    0: begin cand_in = "input/input_vectors.txt";                   cand_out = "results/rtl_result.txt";                   end
-                    1: begin cand_in = "../input/input_vectors.txt";                cand_out = "../results/rtl_result.txt";                end
-                    2: begin cand_in = "../../input/input_vectors.txt";             cand_out = "../../results/rtl_result.txt";             end
-                    3: begin cand_in = "../../../input/input_vectors.txt";          cand_out = "../../../results/rtl_result.txt";          end
-                    4: begin cand_in = "../../../../input/input_vectors.txt";       cand_out = "../../../../results/rtl_result.txt";       end
-                    5: begin cand_in = "../../../../../input/input_vectors.txt";    cand_out = "../../../../../results/rtl_result.txt";    end
-                    default: begin cand_in = "../../../../../../input/input_vectors.txt"; cand_out = "../../../../../../results/rtl_result.txt"; end
+                    0: begin
+                        fd_t = $fopen("input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "input/input_vectors.txt";
+                            trace_path = "results/rtl_result.txt";
+                            trace_fd_pre = $fopen("results/rtl_result.txt", "w");
+                        end
+                    end
+                    1: begin
+                        fd_t = $fopen("../input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "../input/input_vectors.txt";
+                            trace_path = "../results/rtl_result.txt";
+                            trace_fd_pre = $fopen("../results/rtl_result.txt", "w");
+                        end
+                    end
+                    2: begin
+                        fd_t = $fopen("../../input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "../../input/input_vectors.txt";
+                            trace_path = "../../results/rtl_result.txt";
+                            trace_fd_pre = $fopen("../../results/rtl_result.txt", "w");
+                        end
+                    end
+                    3: begin
+                        fd_t = $fopen("../../../input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "../../../input/input_vectors.txt";
+                            trace_path = "../../../results/rtl_result.txt";
+                            trace_fd_pre = $fopen("../../../results/rtl_result.txt", "w");
+                        end
+                    end
+                    4: begin
+                        fd_t = $fopen("../../../../input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "../../../../input/input_vectors.txt";
+                            trace_path = "../../../../results/rtl_result.txt";
+                            trace_fd_pre = $fopen("../../../../results/rtl_result.txt", "w");
+                        end
+                    end
+                    5: begin
+                        fd_t = $fopen("../../../../../input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "../../../../../input/input_vectors.txt";
+                            trace_path = "../../../../../results/rtl_result.txt";
+                            trace_fd_pre = $fopen("../../../../../results/rtl_result.txt", "w");
+                        end
+                    end
+                    default: begin
+                        fd_t = $fopen("../../../../../../input/input_vectors.txt", "r");
+                        if (fd_t != 0) begin
+                            case_path = "../../../../../../input/input_vectors.txt";
+                            trace_path = "../../../../../../results/rtl_result.txt";
+                            trace_fd_pre = $fopen("../../../../../../results/rtl_result.txt", "w");
+                        end
+                    end
                 endcase
-                fd_t = $fopen(cand_in, "r");
-                if (fd_t != 0) begin
-                    $fclose(fd_t);
-                    case_path  = cand_in;
-                    trace_path = cand_out;
-                end
             end
+            case_fd_pre = fd_t;
         end
     endtask
+
 
     task case_error;
         input [8*200-1:0] msg;
@@ -378,7 +428,7 @@ module tb_tdm_top_filebased;
         reg [1023:0]         seen;
         reg [DATA_WIDTH-1:0] word;
         begin
-            fd_c = $fopen(case_path, "r");
+            fd_c = (case_fd_pre != 0) ? case_fd_pre : $fopen(case_path, "r");
             if (fd_c == 0) begin
                 $display("[filebased-tb] ERROR: cannot open case file %0s", case_path);
                 $display("[filebased-tb]        Set REPO_DIR at the top of this testbench to the repository folder (forward slashes),");
@@ -448,7 +498,7 @@ module tb_tdm_top_filebased;
         reg [3:0] nib;
         begin
             read_message_case;
-            fd_tr = $fopen(trace_path, "w");
+            fd_tr = (trace_fd_pre != 0) ? trace_fd_pre : $fopen(trace_path, "w");
             if (fd_tr == 0) begin
                 $display("[filebased-tb] ERROR: cannot open %0s", trace_path);
                 stop_sim;
@@ -571,8 +621,15 @@ module tb_tdm_top_filebased;
         case_path   = CASE_FILE;
         if (RUN_CASE && REPO_DIR == "." && !$test$plusargs("CASE="))
             find_repo_dir;                                 // REPO_DIR not set: look for the repository
-        if ($value$plusargs("TRACE=%s",      trace_path))  ;
+        if ($value$plusargs("TRACE=%s",      trace_path) && trace_fd_pre != 0) begin
+            $fclose(trace_fd_pre);                         // +TRACE wins over the file found above
+            trace_fd_pre = 0;
+        end
         if ($value$plusargs("CASE=%s",       case_path))   ;
+        if (RUN_CASE && case_fd_pre == 0 && REPO_DIR != "." && !$test$plusargs("CASE="))
+            case_fd_pre = $fopen(CASE_FILE, "r");          // absolute REPO_DIR: open the constant path
+        if (RUN_CASE && trace_fd_pre == 0 && REPO_DIR != "." && !$test$plusargs("TRACE="))
+            trace_fd_pre = $fopen(TRACE_FILE, "w");
         if (RUN_CASE) $display("[filebased-tb] input file : %0s", case_path);
 
         for (idx = 0; idx < MAX_VECTORS; idx = idx + 1)
