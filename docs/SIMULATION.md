@@ -124,9 +124,10 @@ CH3 = 5a
 ```
 
 1. Put the case in `input/input_vectors.txt` (copy one from `input/test_cases.txt`).
-2. In `techbench/tb_tdm_top_filebased.v` set `NUM_CHANNELS`, `DATA_WIDTH` to the values of the file and, once,
-   `REPO_DIR` to the repository folder (Vivado: absolute path with forward slashes). The testbench stops with an error
-   if the size does not match the file.
+2. In `techbench/tb_tdm_top_filebased.v` set `NUM_CHANNELS`, `DATA_WIDTH` to the values of the file. `REPO_DIR` can
+   stay `"."` when the Vivado project is inside the repository (the testbench finds `input/` up to 6 folders above the
+   simulation folder); otherwise set it to the repository folder (absolute path, forward slashes). The testbench stops
+   with an error if the file is not found or its size does not match.
 3. Run the simulation to the end (Vivado: Run Simulation, then **Run All**; Icarus:
    `iverilog -g2001 -o sim/tb techbench/tb_tdm_top_filebased.v src/*.v && vvp sim/tb` from the repository folder).
    → `results/rtl_result.txt`

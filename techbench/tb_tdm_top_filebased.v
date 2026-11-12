@@ -2,9 +2,11 @@
 // tb_tdm_top_filebased.v
 //
 // QUICK START (one case, Vivado or Icarus)
-//   1. Set REPO_DIR below to the repository folder once
-//      (Vivado: absolute path with forward slashes, e.g.
-//       "C:/GitHub/TDM-4---Channel-Multiplerxer-Demultiplexer-").
+//   1. REPO_DIR below: leave "." when the simulation runs inside the
+//      repository (Icarus from the repository folder, or a Vivado project
+//      created inside it: the testbench looks up to 6 folders above the
+//      run folder). Otherwise set the absolute path, forward slashes, e.g.
+//      "C:/GitHub/TDM-4---Channel-Multiplerxer-Demultiplexer-".
 //   2. Put the case in input/input_vectors.txt (copy one from
 //      input/test_cases.txt) and set NUM_CHANNELS / DATA_WIDTH below to
 //      the same values as in that file.
@@ -128,7 +130,7 @@ module tb_tdm_top_filebased;
     // ---- set these to match input/input_vectors.txt, and REPO_DIR once ----
     parameter NUM_CHANNELS   = 4;
     parameter DATA_WIDTH     = 8;
-    parameter REPO_DIR       = ".";    // Vivado: absolute repository path, forward slashes
+    parameter REPO_DIR       = ".";    // "." = find the repository automatically; or an absolute path, forward slashes
     parameter RUN_CASE       = 1;      // 1 = one case from input/input_vectors.txt, 0 = vector regression
 
     localparam CASE_FILE  = {REPO_DIR, "/input/input_vectors.txt"};
@@ -314,8 +316,47 @@ module tb_tdm_top_filebased;
                          case_path, file_n, file_w, NUM_CHANNELS, DATA_WIDTH);
                 $display("[filebased-tb]        Write NUM_CHANNELS and DATA_WIDTH before the CH lines, and set the testbench parameters");
                 $display("[filebased-tb]        to the same values at the top of this testbench.");
-                sim_done = 1'b1;
-                $finish;
+                stop_sim;
+            end
+        end
+    endtask
+
+    // End the run. Vivado (xsim) only ends at the end of the current time
+    // step, so after $finish this process must wait instead of going on in
+    // zero time (a loop reading a file that failed to open never ends).
+    task stop_sim;
+        begin
+            sim_done = 1'b1;
+            $finish;
+            forever #(CLK_PERIOD);
+        end
+    endtask
+
+    // REPO_DIR left at ".": look for input/input_vectors.txt in the current
+    // folder and up to 6 folders above it. A Vivado project inside the
+    // repository simulates in <project>/<project>.sim/sim_1/behav/xsim,
+    // 5 folders below the repository.
+    task find_repo_dir;
+        integer up, fd_t;
+        reg [8*64-1:0] cand_in, cand_out;
+        begin
+            fd_t = 0;
+            for (up = 0; up <= 6 && fd_t == 0; up = up + 1) begin
+                case (up)
+                    0: begin cand_in = "input/input_vectors.txt";                   cand_out = "results/rtl_result.txt";                   end
+                    1: begin cand_in = "../input/input_vectors.txt";                cand_out = "../results/rtl_result.txt";                end
+                    2: begin cand_in = "../../input/input_vectors.txt";             cand_out = "../../results/rtl_result.txt";             end
+                    3: begin cand_in = "../../../input/input_vectors.txt";          cand_out = "../../../results/rtl_result.txt";          end
+                    4: begin cand_in = "../../../../input/input_vectors.txt";       cand_out = "../../../../results/rtl_result.txt";       end
+                    5: begin cand_in = "../../../../../input/input_vectors.txt";    cand_out = "../../../../../results/rtl_result.txt";    end
+                    default: begin cand_in = "../../../../../../input/input_vectors.txt"; cand_out = "../../../../../../results/rtl_result.txt"; end
+                endcase
+                fd_t = $fopen(cand_in, "r");
+                if (fd_t != 0) begin
+                    $fclose(fd_t);
+                    case_path  = cand_in;
+                    trace_path = cand_out;
+                end
             end
         end
     endtask
@@ -325,8 +366,7 @@ module tb_tdm_top_filebased;
         input integer     ch;
         begin
             $display("[filebased-tb] ERROR: %0s: CH%0d: %0s", case_path, ch, msg);
-            sim_done = 1'b1;
-            $finish;
+            stop_sim;
         end
     endtask
 
@@ -341,8 +381,9 @@ module tb_tdm_top_filebased;
             fd_c = $fopen(case_path, "r");
             if (fd_c == 0) begin
                 $display("[filebased-tb] ERROR: cannot open case file %0s", case_path);
-                sim_done = 1'b1;
-                $finish;
+                $display("[filebased-tb]        Set REPO_DIR at the top of this testbench to the repository folder (forward slashes),");
+                $display("[filebased-tb]        e.g. \"C:/GitHub/TDM-4---Channel-Multiplerxer-Demultiplexer-\", and check that input/input_vectors.txt exists.");
+                stop_sim;
             end
             file_n = -1; file_w = -1; seen = 0;
             while (!$feof(fd_c)) begin
@@ -410,8 +451,7 @@ module tb_tdm_top_filebased;
             fd_tr = $fopen(trace_path, "w");
             if (fd_tr == 0) begin
                 $display("[filebased-tb] ERROR: cannot open %0s", trace_path);
-                sim_done = 1'b1;
-                $finish;
+                stop_sim;
             end
             last = n_frames * FRAME + 1;               // cycle in which the last word reaches its output
 
@@ -511,8 +551,7 @@ module tb_tdm_top_filebased;
             if (errs == 0) $display("[filebased-tb] [PASS] every channel received its message");
             else           $display("[filebased-tb] [FAIL] %0d received slot(s) differ from the sent slots", errs);
             $display(" [filebased-tb] TONG KET: %0d kenh, %0d loi", NUM_CHANNELS, errs);
-            sim_done = 1'b1;
-            $finish;
+            stop_sim;
         end
     endtask
 
@@ -530,8 +569,11 @@ module tb_tdm_top_filebased;
         if ($value$plusargs("OUT_LAT=%s",    lat_path))    ;
         trace_path  = TRACE_FILE;
         case_path   = CASE_FILE;
+        if (RUN_CASE && REPO_DIR == "." && !$test$plusargs("CASE="))
+            find_repo_dir;                                 // REPO_DIR not set: look for the repository
         if ($value$plusargs("TRACE=%s",      trace_path))  ;
         if ($value$plusargs("CASE=%s",       case_path))   ;
+        if (RUN_CASE) $display("[filebased-tb] input file : %0s", case_path);
 
         for (idx = 0; idx < MAX_VECTORS; idx = idx + 1)
             vectors[idx] = {VW{1'bx}};      // sentinel: "not filled by the file"
@@ -555,7 +597,7 @@ module tb_tdm_top_filebased;
 
         if (num_vectors == 0) begin
             $display("[filebased-tb] ERROR: no vectors read from %0s (missing/empty file, or MAX_VECTORS too small)", in_path);
-            $finish;
+            stop_sim;
         end
         $display("[filebased-tb] loaded %0d test vector(s) from %0s", num_vectors, in_path);
 
@@ -568,7 +610,7 @@ module tb_tdm_top_filebased;
         if (fd_out == 0 || fd_stream == 0 || fd_lat == 0) begin
             $display("[filebased-tb] ERROR: cannot open an output file (%0s | %0s | %0s)",
                       hex_path, stream_path, lat_path);
-            $finish;
+            stop_sim;
         end
 
         // -----------------------------------------------------
@@ -651,8 +693,7 @@ module tb_tdm_top_filebased;
         else              $display(" >>> CO %0d VECTOR FAILED - xem chi tiet [FAIL] phia tren", errors);
         $display(" ket qua chi tiet da ghi vao: %0s | %0s | %0s", hex_path, stream_path, lat_path);
         $display("======================================================");
-        sim_done = 1'b1;
-        $finish;
+        stop_sim;
     end
 
 endmodule
