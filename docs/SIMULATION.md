@@ -111,6 +111,44 @@ For the file-driven testbench `techbench/tb_tdm_top_filebased.v` (golden model f
    python golden_model/run_verification.py --no-sim --vectors C:/tdm_work/input_vectors.hex --results C:/tdm_work
    ```
 
+### One case from a text file, with waveform
+
+Write the case in a text file (or edit `input/single_case.txt`): the size first, then one line per channel, hex
+without `0x`.
+
+```
+// input/single_case.txt
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8
+CH0 = a5
+CH1 = 3c
+CH2 = f0
+CH3 = 5a
+```
+
+**Vivado GUI, one command.** With `src/*.v` as design sources and `techbench/tb_tdm_top_filebased.v` as a simulation
+source, type in the Tcl console (use your own repository path, forward slashes, no accents):
+
+```tcl
+set case_file C:/path/to/repo/input/single_case_4x16.txt     ;# optional, default input/single_case.txt
+source C:/path/to/repo/scripts/vivado_single_case.tcl
+```
+
+The script reads `NUM_CHANNELS` and `DATA_WIDTH` from the file, sets them as simulation parameters, sets the file
+paths, launches the simulation and runs it to `$finish`, then runs the golden model if Python is on the PATH. Both
+files are written to `results/single_case/<N>x<W>/`. Add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`,
+`TDM_DATA`, `DUT/load`, `DUT/word_done`, `DUT/demux_select` and `ch_out` (radix hexadecimal) to the waveform, then
+`restart` and `run all`.
+
+**Without the script.** Set `NUM_CHANNELS`, `DATA_WIDTH`, `CASE_FILE` and `TRACE_FILE` at the top of the testbench (the
+size must equal the one in the case file, otherwise the testbench stops with an error), run to `$finish`, then:
+
+```bash
+python golden_model/single_case.py --case C:/path/to/case.txt --out C:/path/to/golden_result.txt
+```
+
+**Icarus Verilog:** `python scripts/run_single_case.py --case input/single_case_4x16.txt` does both steps.
+
 ## 5. Synthesis (optional, Vivado)
 
 ```bash

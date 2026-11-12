@@ -1,5 +1,12 @@
 # Golden model — how to run it
 
+> **Parameterized model.** `TDMGoldenModel(num_channels=4, data_width=8)` follows the parameters of the RTL.
+> `single_case.py` writes the expected result of one case file (`input/single_case.txt`: `NUM_CHANNELS`, `DATA_WIDTH`,
+> one `CHi = value` line per channel) in the same text format as the trace of `techbench/tb_tdm_top_filebased.v`, for a
+> side-by-side comparison by eye: `python golden_model/single_case.py --case input/single_case_4x16.txt --out golden_result.txt`.
+> Each step of `golden_model.py` names the RTL line that does the same job; see [../docs/golden_vs_rtl.md](../docs/golden_vs_rtl.md).
+> The automatic Python comparison described below (`run_verification.py`) still assumes the default 4 × 8.
+
 The **golden model** is a tiny Python program that knows what the TDM system *should* do.
 It never looks at the Verilog. The RTL simulation (Vivado XSIM or Icarus) writes its results
 to files, and the Python scripts in this folder compare those files with what the golden
