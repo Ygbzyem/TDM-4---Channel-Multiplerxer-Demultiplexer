@@ -17,6 +17,7 @@ def write_report(path, summary):
     lines.append("# Verification Report\n")
     lines.append(f"Generated : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     lines.append(f"Input     : `{summary['input_file']}`\n")
+    lines.append(f"Size      : {summary.get('size', '4 x 8')} (NUM_CHANNELS x DATA_WIDTH)\n")
     lines.append("Reference : Python golden model (`golden_model.TDMGoldenModel`)\n")
     lines.append("")
     lines.append(f"Total vectors: {total}\n")
@@ -28,7 +29,7 @@ def write_report(path, summary):
     lines.append(f"- Mid-stream change: min {lat['steady_min']} / max {lat['steady_max']} clocks")
     lines.append(f"- Allowed maximum: {lat['max_allowed']} clocks -> {'PASS' if lat['ok'] else 'FAIL'}\n")
     lines.append("## Per-vector results\n")
-    lines.append("| # | Input | RTL CHx_OUT | Bit stream (32 bit) | Latency | Result |")
+    lines.append(f"| # | Input | RTL outputs | Bit stream ({summary.get('frame_bits', 32)} bit) | Latency | Result |")
     lines.append("|---|-------|-------------|---------------------|---------|--------|")
     for r in results:
         stream = "match" if r["stream_ok"] else f"mismatch @ cycle {r['bad_cycle']}"

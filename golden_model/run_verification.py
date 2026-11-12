@@ -5,6 +5,8 @@ with the Python golden model.
     python golden_model/run_verification.py --sim xsim       # force Vivado XSIM
     python golden_model/run_verification.py --sim iverilog   # force Icarus Verilog
     python golden_model/run_verification.py --vectors input/random_vectors.hex
+    python golden_model/run_verification.py --channels 8 --width 16 --vectors input/random_vectors_8x16.hex
+                                                             # any NUM_CHANNELS x DATA_WIDTH
     python golden_model/run_verification.py --no-sim         # compare existing result files
     python golden_model/run_verification.py --no-sim --vectors D:/x/input_vectors.hex --results D:/x
                                                              # result files live in another folder
@@ -97,7 +99,7 @@ def _print_summary(stdout):
             print("   ", line.strip())
 
 
-def simulate_iverilog(vectors, paths):
+def simulate_iverilog(vectors, paths, n=4, w=8):
     iverilog, vvp = find_tool("iverilog"), find_tool("vvp")
     if not iverilog or not vvp:
         print("ERROR: iverilog/vvp not found.")
@@ -110,7 +112,8 @@ def simulate_iverilog(vectors, paths):
 
     print("[1/2] compiling RTL + testbench (iverilog) ...")
     r = subprocess.run(
-        [iverilog, "-g2012", "-o", str(SIM), str(TB), *sources],
+        [iverilog, "-g2012", f"-P{TB_TOP}.RUN_CASE=0", f"-P{TB_TOP}.NUM_CHANNELS={n}",
+         f"-P{TB_TOP}.DATA_WIDTH={w}", "-o", str(SIM), str(TB), *sources],
         cwd=ROOT, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -135,7 +138,7 @@ def simulate_iverilog(vectors, paths):
     return True
 
 
-def simulate_xsim(vectors, paths):
+def simulate_xsim(vectors, paths, n=4, w=8):
     xvlog, xelab, xsim = (find_vivado_tool(t) for t in ("xvlog", "xelab", "xsim"))
     if not (xvlog and xelab and xsim):
         print("ERROR: Vivado xvlog/xelab/xsim not found.")
@@ -162,13 +165,22 @@ def simulate_xsim(vectors, paths):
     for f in files:
         text = f.read_text(encoding="utf-8", errors="replace")
         if f == TB:
+            text, cnt = re.subn(r'(parameter\s+RUN_CASE\s*=\s*)1', r'\g<1>0', text)   # vector regression mode
+            if cnt != 1:
+                print("ERROR: could not patch parameter RUN_CASE in the testbench copy.")
+                return False
+            for name, val in (("NUM_CHANNELS", n), ("DATA_WIDTH", w)):
+                text, k = re.subn(r'(parameter\s+' + name + r'\s*=\s*)\d+', r'\g<1>' + str(val), text, count=1)
+                if k != 1:
+                    print(f"ERROR: could not patch parameter {name} in the testbench copy.")
+                    return False
             for name, val in param_paths.items():
-                text, n = re.subn(
+                text, cnt = re.subn(
                     r'(parameter\s+' + name + r'\s*=\s*)"[^"]*"',
                     lambda m, v=Path(val).as_posix(): m.group(1) + '"' + v + '"',
                     text,
                 )
-                if n != 1:
+                if cnt != 1:
                     print(f"ERROR: could not patch parameter {name} in the testbench copy.")
                     return False
         if "`timescale" not in text:
@@ -206,17 +218,17 @@ def simulate_xsim(vectors, paths):
     return True
 
 
-def simulate(vectors, paths, which="auto"):
+def simulate(vectors, paths, which="auto", n=4, w=8):
     if which == "iverilog":
-        return simulate_iverilog(vectors, paths)
+        return simulate_iverilog(vectors, paths, n, w)
     if which == "xsim":
-        return simulate_xsim(vectors, paths)
+        return simulate_xsim(vectors, paths, n, w)
     # auto
     if find_tool("iverilog") and find_tool("vvp"):
-        return simulate_iverilog(vectors, paths)
+        return simulate_iverilog(vectors, paths, n, w)
     if find_vivado_tool("xsim"):
         print("iverilog not found - using Vivado XSIM.")
-        return simulate_xsim(vectors, paths)
+        return simulate_xsim(vectors, paths, n, w)
     print("ERROR: no simulator found (iverilog or Vivado xsim).")
     print("  Vivado users: set VIVADO_BIN to the Vivado 'bin' folder, then run with --sim xsim.")
     return False
@@ -224,7 +236,10 @@ def simulate(vectors, paths, which="auto"):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
-    ap.add_argument("--vectors", default=str(compare_output.DEFAULT_INPUT))
+    ap.add_argument("--vectors", default=str(compare_output.DEFAULT_INPUT),
+                    help="packed {CH0,CH1,...} hex vectors of NUM_CHANNELS*DATA_WIDTH bits")
+    ap.add_argument("--channels", type=int, default=4, help="NUM_CHANNELS (default 4)")
+    ap.add_argument("--width", type=int, default=8, help="DATA_WIDTH (default 8)")
     ap.add_argument("--sim", choices=["auto", "iverilog", "xsim"], default="auto",
                     help="simulator to use (default: iverilog if installed, else Vivado xsim)")
     ap.add_argument("--results", metavar="DIR",
@@ -260,7 +275,11 @@ def main(argv=None):
         res.mkdir(parents=True, exist_ok=True)
         paths = {k: res / v.name for k, v in paths.items()}
 
-    if not args.no_sim and not simulate(vectors, paths, args.sim):
+    if args.channels < 2 or args.width < 2:
+        print("ERROR: --channels and --width must both be at least 2")
+        return 2
+
+    if not args.no_sim and not simulate(vectors, paths, args.sim, args.channels, args.width):
         return 2
 
     if args.sim_label:
@@ -275,6 +294,7 @@ def main(argv=None):
     ok = compare_output.run_comparison(
         vectors, paths["hex"], paths["stream"], paths["lat"], paths["report"],
         excel_file=None if args.no_excel else paths["xlsx"], simulator=label,
+        num_channels=args.channels, data_width=args.width,
     )
     return 0 if ok else 1
 

@@ -1,8 +1,10 @@
 # Verification Report
 
-Generated : 2026-10-22 03:10:16
+Generated : 2026-11-13 01:49:35
 
 Input     : `input_vectors.hex`
+
+Size      : 4 x 8 (NUM_CHANNELS x DATA_WIDTH)
 
 Reference : Python golden model (`golden_model.TDMGoldenModel`)
 
@@ -22,7 +24,7 @@ Failed: 0
 
 ## Per-vector results
 
-| # | Input | RTL CHx_OUT | Bit stream (32 bit) | Latency | Result |
+| # | Input | RTL outputs | Bit stream (32 bit) | Latency | Result |
 |---|-------|-------------|---------------------|---------|--------|
 | 0 | `a53cf05a` | match | match | 33 | PASS |
 | 1 | `11223344` | match | match | 40 | PASS |

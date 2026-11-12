@@ -1,0 +1,6 @@
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8
+CH0 = 00000000
+CH1 = ffffffff
+CH2 = 0f0f0f0f
+CH3 = f0f0f0f0

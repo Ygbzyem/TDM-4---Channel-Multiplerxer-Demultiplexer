@@ -1,16 +1,23 @@
 # `tdm_top` — integration and timing glue layer
 
-`tdm_top.v` wires the five sub-modules together and adds **four lines of glue logic**. The sub-modules are used
-unchanged, and everything that makes the system behave correctly lives here.
+`tdm_top.v` wires the five sub-modules together and adds **a few lines of glue logic**; everything that makes the
+system behave correctly lives here. The design is parameterized (`NUM_CHANNELS`, `DATA_WIDTH`); the glue is written
+for any size:
 
 ```verilog
-wire [4:0] bit_count_next = bit_count + 5'd1;
-wire [1:0] mux_select    = bit_count_next[4:3];       // look one step ahead
-wire       load          = (bit_count[2:0] == 3'b111);
-wire       byte_boundary = (bit_count[2:0] == 3'b111); // same formula as load
-reg  [1:0] demux_select;                              // channel_select delayed by one clock
-always @(posedge clk) demux_select <= rst ? 2'b00 : channel_select;
+wire last_bit = (bit_index == DATA_WIDTH - 1);                    // last bit of the current word
+wire [CH_W-1:0] next_channel = (channel_select == NUM_CHANNELS - 1) ? 0 : channel_select + 1;
+wire [CH_W-1:0] mux_select   = last_bit ? next_channel : channel_select;   // look one step ahead
+wire load          = last_bit;
+wire word_boundary = last_bit;                                    // same formula as load
+reg  [CH_W-1:0] demux_select;                                     // channel_select delayed by one clock
+always @(posedge clk) demux_select <= rst ? 0 : channel_select;
 ```
+
+For the default 4 × 8 these are exactly the original formulas: `mux_select = (bit_count + 1)[4:3]`,
+`load = byte_boundary = (bit_count[2:0] == 3'b111)`, where `bit_count = {channel_select, bit_index}`. The text and the
+trace below use the 4 × 8 names (`bit_count`, byte); in the RTL `byte_boundary` / `byte_done` are now called
+`word_boundary` / `word_done`.
 
 ## Why each line is needed
 

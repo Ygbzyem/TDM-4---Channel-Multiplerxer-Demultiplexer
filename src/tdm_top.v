@@ -1,103 +1,108 @@
 // =============================================================
 // Module      : tdm_top
-// Vai tro     : Noi day ca 5 module con lai voi nhau + lop "glue"
-//               bu do tre 1 chu ky cua cac thanh ghi dong bo, de
-//               he thong chay dung: khong mat bit, khong lech kenh,
-//               va CH0 la kenh dau tien xuat hien sau reset.
+// Function    : connects the five sub-modules and adds the timing
+//               "glue" that compensates the one-clock delay of the
+//               synchronous registers, so that no bit is lost, no
+//               channel is shifted, and CH0 is the first channel to
+//               appear after reset.
 //
-// 5 module con (tdm_counter, tdm_mux, tx_shift_reg, rx_shift_reg,
-// tdm_demux) GIU NGUYEN nhu ban thanh vien viet - khong sua logic
-// ben trong. Toan bo "meo" de he thong chay dung nam GOM HET vao
-// day, o dung 3 dong duoi day:
+// Parameters  : NUM_CHANNELS (>= 2), DATA_WIDTH (>= 2).
+//               Default 4 x 8 = the original design.
+//               ch_in  = {CH0, CH1, ..., CH(N-1)}             (channel 0 = most significant word)
+//               ch_out = {CH0_OUT, CH1_OUT, ..., CH(N-1)_OUT}  (same packing)
+//               For 4 x 8 this is the packed 32-bit vector of the input files:
+//               a53cf05a -> CH0=a5, CH1=3c, CH2=f0, CH3=5a.
+//               Frame length = NUM_CHANNELS * DATA_WIDTH clock cycles.
 //
-//   mux_select    = (bit_count + 1)[4:3]   -- nhin truoc 1 buoc
-//   load          = bit_count[2:0] == 3'b111
-//   byte_boundary = bit_count[2:0] == 3'b111
-//   demux_select  = channel_select, TRE 1 chu ky (thanh ghi rieng)
-//
-// TAI SAO CAN 4 DONG NAY (tom tat - xem docs/tdm_top.md de biet chi
-// tiet + vi du so):
-//
-//   1) tx_shift_reg chi "load" duoc dung luc canh clock toi, nen
-//      muon no phat dung byte cua kenh X trong suot 8 clock cua
-//      slot X, phai bao no truoc 1 buoc (nhin channel_select cua
-//      slot KE TIEP, khong phai slot hien tai).
-//
-//   2) load/byte_boundary phai no o CUOI slot (bit[2:0]==7), khong
-//      phai o dau slot (==0) - neu dat o dau slot, byte se bi phat
-//      tre mat 1 nhip so voi khung cua no, gay LECH KENH khi ghi ra
-//      demux (da kiem chung bang mo phong, xem docs/tdm_top.md).
-//
-//   3) Dung luc byte_done bat len 1, channel_select "song" (lay
-//      thang tu tdm_counter) da nhay sang kenh KE TIEP mat roi (vi
-//      bit_count khong dung lai cho ai ca). Neu demux doc thang gia
-//      tri song do, no se ghi byte vua xong vao SAI kenh (kenh ke
-//      tiep). Phai dung 1 thanh ghi rieng (demux_select) de "giu
-//      lai" dung gia tri channel_select cua 1 chu ky TRUOC, luc byte
-//      do van con dung.
+// Glue logic (same three rules as the 4 x 8 design, written for any size):
+//   1) mux_select  = channel of the NEXT clock cycle (look one step ahead),
+//                    because tx_shift_reg loads on the clock edge that ends
+//                    the current word.
+//   2) load = word_boundary = (bit_index == DATA_WIDTH-1): load and latch at
+//                    the END of a word, not at the start.
+//   3) demux_select = channel_select delayed by one clock, because word_done
+//                    is a registered pulse one clock after word_boundary.
+// See docs/tdm_top.md for the explanation with a real trace.
 // =============================================================
-
-module tdm_top (
-    input  wire       clk,
-    input  wire       rst,
-    input  wire [7:0] CH0,
-    input  wire [7:0] CH1,
-    input  wire [7:0] CH2,
-    input  wire [7:0] CH3,
-    output wire       TDM_DATA,
-    output wire [7:0] CH0_OUT,
-    output wire [7:0] CH1_OUT,
-    output wire [7:0] CH2_OUT,
-    output wire [7:0] CH3_OUT
+module tdm_top #(
+    parameter NUM_CHANNELS = 4,
+    parameter DATA_WIDTH   = 8
+) (
+    clk, rst, ch_in, TDM_DATA, ch_out
 );
+    function integer cnt_width;
+        input integer value;
+        integer v;
+        begin
+            v = value - 1;
+            cnt_width = 0;
+            while (v > 0) begin
+                cnt_width = cnt_width + 1;
+                v = v >> 1;
+            end
+            if (cnt_width == 0) cnt_width = 1;
+        end
+    endfunction
+
+    localparam BIT_W   = cnt_width(DATA_WIDTH);
+    localparam CH_W    = cnt_width(NUM_CHANNELS);
+    localparam FRAME_W = cnt_width(NUM_CHANNELS * DATA_WIDTH);
+
+    input  wire                               clk;
+    input  wire                               rst;
+    input  wire [NUM_CHANNELS*DATA_WIDTH-1:0] ch_in;
+    output wire                               TDM_DATA;
+    output wire [NUM_CHANNELS*DATA_WIDTH-1:0] ch_out;
 
     // -----------------------------------------------------------
-    // Nguon dong ho/dem duy nhat
+    // The single time source
     // -----------------------------------------------------------
-    wire [4:0] bit_count;
-    wire [1:0] channel_select;   // "song" - dung cho MUX (qua mux_select), KHONG dung thang cho DEMUX
+    wire [BIT_W-1:0]   bit_index;
+    wire [CH_W-1:0]    channel_select;   // "live" value: used for the mux (via mux_select), NOT for the demux
+    wire [FRAME_W-1:0] bit_count;        // not used here (testbench only), removed by synthesis
 
-    tdm_counter u_counter (
+    tdm_counter #(.NUM_CHANNELS(NUM_CHANNELS), .DATA_WIDTH(DATA_WIDTH)) u_counter (
         .clk            (clk),
         .rst            (rst),
-        .bit_count      (bit_count),
-        .channel_select (channel_select)
+        .bit_index      (bit_index),
+        .channel_select (channel_select),
+        .bit_count      (bit_count)
     );
 
     // -----------------------------------------------------------
-    // Lop glue: suy ra 3 tin hieu can thiet tu bit_count/channel_select
+    // Glue logic
     // -----------------------------------------------------------
-    wire [4:0] bit_count_next = bit_count + 5'd1;
-    wire [1:0] mux_select     = bit_count_next[4:3];       // nhin truoc 1 buoc, cho MUX/TX
+    wire last_bit = (bit_index == DATA_WIDTH - 1);              // last bit of the current word
 
-    wire load          = (bit_count[2:0] == 3'b111);       // no o CUOI slot
-    wire byte_boundary = (bit_count[2:0] == 3'b111);       // load va byte_boundary la CUNG 1 cong thuc
+    wire [CH_W-1:0] next_channel = (channel_select == NUM_CHANNELS - 1) ? {CH_W{1'b0}}
+                                                                        : channel_select + 1'b1;
+    wire [CH_W-1:0] mux_select   = last_bit ? next_channel : channel_select;   // rule 1: look ahead
 
-    reg  [1:0] demux_select;                               // "anh chup", tre 1 chu ky so voi channel_select
+    wire load          = last_bit;                               // rule 2: load at the end of a word
+    wire word_boundary = last_bit;                               //         latch at the end of a word
+
+    reg  [CH_W-1:0] demux_select;                                // rule 3: delayed copy
     always @(posedge clk) begin
         if (rst)
-            demux_select <= 2'b00;
+            demux_select <= {CH_W{1'b0}};
         else
             demux_select <= channel_select;
     end
 
     // -----------------------------------------------------------
-    // Duong du lieu: mux -> tx_shift_reg -> TDM_DATA -> rx_shift_reg -> demux
+    // Data path: mux -> tx_shift_reg -> TDM_DATA -> rx_shift_reg -> demux
     // -----------------------------------------------------------
-    wire [7:0] mux_out;
-    wire [7:0] rx_data;
-    wire       byte_done;
+    wire [DATA_WIDTH-1:0] mux_out;
+    wire [DATA_WIDTH-1:0] rx_data;
+    wire                  word_done;
 
-    tdm_mux u_mux (
-        .CH0            (CH0),
-        .CH1            (CH1),
-        .CH2            (CH2),
-        .CH3            (CH3),
+    tdm_mux #(.NUM_CHANNELS(NUM_CHANNELS), .DATA_WIDTH(DATA_WIDTH)) u_mux (
+        .ch_in          (ch_in),
         .channel_select (mux_select),
         .mux_out        (mux_out)
     );
 
-    tx_shift_reg u_tx (
+    tx_shift_reg #(.DATA_WIDTH(DATA_WIDTH)) u_tx (
         .clk        (clk),
         .rst        (rst),
         .mux_out    (mux_out),
@@ -105,25 +110,22 @@ module tdm_top (
         .serial_out (TDM_DATA)
     );
 
-    rx_shift_reg u_rx (
+    rx_shift_reg #(.DATA_WIDTH(DATA_WIDTH)) u_rx (
         .clk           (clk),
         .rst           (rst),
         .serial_data   (TDM_DATA),
-        .byte_boundary (byte_boundary),
+        .word_boundary (word_boundary),
         .rx_data       (rx_data),
-        .byte_done     (byte_done)
+        .word_done     (word_done)
     );
 
-    tdm_demux u_demux (
+    tdm_demux #(.NUM_CHANNELS(NUM_CHANNELS), .DATA_WIDTH(DATA_WIDTH)) u_demux (
         .clk            (clk),
         .rst            (rst),
         .rx_data        (rx_data),
-        .channel_select (demux_select),   // <-- ban da tre 1 chu ky, KHONG PHAI channel_select song o tren
-        .byte_done      (byte_done),
-        .CH0_OUT        (CH0_OUT),
-        .CH1_OUT        (CH1_OUT),
-        .CH2_OUT        (CH2_OUT),
-        .CH3_OUT        (CH3_OUT)
+        .channel_select (demux_select),   // delayed copy, NOT the live channel_select
+        .word_done      (word_done),
+        .ch_out         (ch_out)
     );
 
 endmodule

@@ -1,16 +1,16 @@
 # TDM 4-Channel Multiplexer/Demultiplexer — Verilog RTL Project
 
-A counter-driven (no FSM) **4-channel Time Division Multiplexing (TDM) multiplexer/demultiplexer** in
-Verilog, with self-checking testbenches, a Python golden model that cross-checks the RTL, and Vivado
+A counter-driven (no FSM) **Time Division Multiplexing (TDM) multiplexer/demultiplexer** in Verilog,
+parameterized by the number of channels and the bits per slot (default 4 channels × 8 bits), with self-checking testbenches, a Python golden model that cross-checks the RTL, and Vivado
 implementation results.
 
 | | |
 |---|---|
-| Design | 6 RTL modules, 1 shared 5-bit counter, 8-bit × 4 channels over a single `TDM_DATA` wire |
+| Design | 6 RTL modules, 1 shared counter, parameterized `NUM_CHANNELS` × `DATA_WIDTH` (default 4 × 8) over a single `TDM_DATA` wire, see [Section 2.1](#21-parameters) |
 | System testbench | **38 / 38** checks pass (Icarus Verilog and Vivado XSIM), see [Section 8](#8-verification) |
-| Golden model | **200 / 200** random vectors match bit-for-bit (stream, outputs, latency), see [Section 8.3](#83-python-golden-model-rtl-vs-reference) |
-| Latency | 33 clocks from reset to first valid frame, 40 clocks (max 41) after a mid-stream data change |
-| Implementation | Vivado 2020.2 (post-implementation), Kintex-7 `xc7k70tfbv676-1`: **22 LUTs, 63 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.574 ns, WHS +0.159 ns), see [Section 9](#9-implementation-results) |
+| Golden model | **200 / 200** random vectors match bit-for-bit (stream, outputs, latency) for 4 × 8, plus other sizes; **46 / 46** message cases (4 × 8, 4 × 16, 8 × 8, 3 × 12) give identical RTL and golden result files, see [Section 8.3](#83-python-golden-model-rtl-vs-reference) and [8.5](#85-message-mode-regression) |
+| Latency | 33 clocks from reset to first valid frame, 40 clocks (max 41) after a mid-stream data change (4 × 8); in general cold start `N·W + 1`, worst case `N·W + W + 1` |
+| Implementation | Vivado 2020.2 (post-implementation), Kintex-7 `xc7k70tfbv676-1`, default 4 × 8: **22 LUTs, 63 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.574 ns, WHS +0.159 ns), see [Section 9](#9-implementation-results) |
 
 ---
 
@@ -45,6 +45,8 @@ with Vivado.
 ```bash
 python scripts/run_tests.py                      # system testbench -> 38/38 PASS
 python golden_model/run_verification.py          # RTL vs Python golden model -> ALL CHECKS PASSED
+python golden_model/golden_model.py              # golden model of input/input_vectors.txt -> results/golden_result.txt
+python golden_model/run_message_regression.py    # many message cases, RTL vs golden result files -> 0 failures
 ```
 
 Add `--sim xsim` to either command to use Vivado XSIM instead of Icarus. The full guide, including
@@ -61,10 +63,12 @@ alternate modes.
 Instead of four wires for four channels, time is divided into fixed slots and each channel only "speaks" during
 its own slot, in a fixed rotation:
 
-- Each **byte** (8 bits) occupies exactly 8 clock cycles, MSB first.
-- One **frame** is 4 consecutive bytes, always in the order CH0 → CH1 → CH2 → CH3 → (repeat): 32 clock cycles per frame.
-- There is exactly **one counter** in the whole system (`bit_count`, free-running 0→31→0), the single timing
-  reference for both transmit and receive sides. No other counter, clock or FSM exists in the design.
+- Each channel **word** (`DATA_WIDTH` bits, 8 by default) occupies exactly `DATA_WIDTH` clock cycles, MSB first.
+- One **frame** is `NUM_CHANNELS` consecutive words, always in the order CH0 → CH1 → … → (repeat):
+  `NUM_CHANNELS × DATA_WIDTH` clock cycles per frame (32 for the default 4 × 8).
+- There is exactly **one counter module** in the whole system (`tdm_counter`: bit position `bit_index` inside a word
+  and channel slot `channel_select`), the single timing reference for both transmit and receive sides. For the
+  default 4 × 8, `{channel_select, bit_index}` is exactly the 5-bit `bit_count` 0→31→0. No FSM exists in the design.
 
 On the transmit side the active channel's byte is loaded into a shift register and sent out one bit per clock. The
 receive side counts on the same beat, so it already knows which channel each completed byte belongs to and writes
@@ -77,8 +81,22 @@ once the pipeline has filled.
 
 **Latency.** Outputs are not valid instantly: after reset the first correct frame is available after **33 clocks**;
 after a mid-stream change of the inputs it takes **40 clocks** (worst case 41 = 31 clocks waiting for the channel's
-load slot + 8 clocks to serialize + 2 output registers). These numbers are measured in simulation and checked by
+load slot + 8 clocks to serialize + 2 output registers). For `N` channels of `W` bits: cold start `N·W + 1`, worst case
+`(N·W − 1) + W + 2 = N·W + W + 1`. These numbers are measured in simulation and checked by
 the golden model ([Section 8.3](#83-python-golden-model-rtl-vs-reference)).
+
+### 2.1 Parameters
+
+| Parameter | Default | Allowed | Meaning |
+|---|---|---|---|
+| `NUM_CHANNELS` | 4 | ≥ 2 | number of channels sharing `TDM_DATA` |
+| `DATA_WIDTH` | 8 | ≥ 2 | bits per channel word (16 = 2 bytes per channel) |
+
+Derived values: frame = `NUM_CHANNELS × DATA_WIDTH` cycles; `ch_in` / `ch_out` are packed `{CH0, CH1, …}` with
+channel 0 as the most significant word, exactly like one line of the input files (4 × 8: `a53cf05a` → CH0 = a5 …
+CH3 = 5a; 4 × 16: `1234abcd00ff8001`); cold-start latency = `NUM_CHANNELS × DATA_WIDTH + 1` cycles (33 for 4 × 8, 65 for 4 × 16).
+Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set the parameters on `tdm_top`
+(`tdm_top #(.NUM_CHANNELS(4), .DATA_WIDTH(16)) u_tdm (...)`); the RTL uses Verilog-2001 only (no `$clog2`).
 
 ---
 
@@ -88,7 +106,7 @@ the golden model ([Section 8.3](#83-python-golden-model-rtl-vs-reference)).
 
 *Data flow: CH0–CH3 → `tdm_mux` (combinational) → `tx_shift_reg` (parallel→serial, MSB-first) → serial
 `TDM_DATA` → `rx_shift_reg` (serial→parallel, MSB-first) → `tdm_demux` (updates an output only when
-`byte_done = 1`) → CH0_OUT–CH3_OUT, all timed off the single `tdm_counter`.*
+`word_done = 1`) → CH0_OUT–CH3_OUT, all timed off the single `tdm_counter`. Shown for the default 4 × 8.*
 
 ---
 
@@ -97,27 +115,30 @@ the golden model ([Section 8.3](#83-python-golden-model-rtl-vs-reference)).
 ```
 .
 ├── src/                         # synthesizable RTL
-│   ├── tdm_counter.v            #   5-bit free-running counter (timing source)
-│   ├── tdm_mux.v                #   4-to-1 channel multiplexer
+│   ├── tdm_counter.v            #   bit / channel counter (the only timing source)
+│   ├── tdm_mux.v                #   N-to-1 channel multiplexer
 │   ├── tx_shift_reg.v           #   parallel-to-serial shift register
 │   ├── rx_shift_reg.v           #   serial-to-parallel shift register
-│   ├── tdm_demux.v              #   byte router to CHx_OUT registers
+│   ├── tdm_demux.v              #   word router to the channel output registers
 │   └── tdm_top.v                #   top level + timing glue layer
 ├── techbench/                   # testbenches
 │   ├── tb_tdm_top.v             #   full-system test (3 layers of checks)
-│   ├── tb_tdm_top_filebased.v   #   file-driven testbench used by the golden model flow
+│   ├── tb_tdm_top_filebased.v   #   one case from input/input_vectors.txt (default), or the vector regression
 │   └── testbench.md             #   walkthrough of tb_tdm_top.v
 ├── golden_model/                # Python reference model + automatic RTL comparison (see its README)
-│   ├── run_verification.py      #   simulate + compare in one command
-│   ├── golden_model.py, compare_output.py, export_excel.py, ...
+│   ├── run_verification.py      #   vector regression: simulate + compare in one command (any N x W)
+│   ├── run_message_regression.py #  message regression: many cases, RTL vs golden result files
+│   ├── golden_model.py          #   reference model; run it to get results/golden_result.txt for input/input_vectors.txt
+│   ├── compare_output.py, export_excel.py, ...
 │   └── verification_logs/       #   latest result files, report and Excel workbook
-├── input/                       # input vectors (input_vectors.hex, random_vectors.hex)
+├── input/                       # input_vectors.txt (the one case), test_cases.txt (all cases), input_vectors.hex / random_vectors.hex (regression)
+├── results/                     # Vivado reports, screenshots, rtl_result.txt and golden_result.txt of the last case
 ├── scripts/
 │   ├── run_tests.py             #   runs every self-checking testbench
 │   └── synth.tcl                #   Vivado batch synthesis + utilization/timing reports
 ├── constraint/constraints.xdc   # clock constraint (pin assignments pending a target board)
 ├── image/                       # block diagrams
-├── docs/                        # SIMULATION.md and design notes
+├── docs/                        # SIMULATION.md, golden_vs_rtl.md (line-by-line mapping) and design notes
 ├── LICENSE
 └── README.md
 ```
@@ -126,105 +147,62 @@ the golden model ([Section 8.3](#83-python-golden-model-rtl-vs-reference)).
 
 ## 5. Module Index
 
+All modules take the parameters `NUM_CHANNELS` and/or `DATA_WIDTH` (defaults 4 and 8).
+
 | # | Module | File | Role |
 |---|--------|------|------|
-| 1 | `tdm_counter` | `tdm_counter.v` | The system's single timing source. Free-running 5-bit counter `bit_count` (0→31→0), with `channel_select = bit_count[4:3]` as its own direct output. |
-| 2 | `tdm_mux` | `tdm_mux.v` | Combinational 4-to-1 MUX. Selects the active channel's byte for serialization. |
-| 3 | `tx_shift_reg` | `tx_shift_reg.v` | Parallel-to-serial shift register, MSB-first. Loads a new byte on `load`, otherwise shifts left once per clock. |
-| 4 | `rx_shift_reg` | `rx_shift_reg.v` | Serial-to-parallel shift register, MSB-first. Shifts continuously; on `byte_boundary` it latches the byte into `rx_data` and pulses `byte_done`. |
-| 5 | `tdm_demux` | `tdm_demux.v` | Routes the completed byte into the correct `CHx_OUT` register, gated by `byte_done`. |
-| 6 | `tdm_top` | `tdm_top.v` | Top-level integration: instantiates the five modules above plus the glue logic that derives correctly-phased `mux_select` / `load` / `byte_boundary` / `demux_select` from the counter's raw outputs. |
+| 1 | `tdm_counter` | `tdm_counter.v` | The system's single timing source: `bit_index` (0 … `DATA_WIDTH`−1) and `channel_select` (0 … `NUM_CHANNELS`−1). Also outputs the frame position `bit_count` for the testbenches. |
+| 2 | `tdm_mux` | `tdm_mux.v` | Combinational N-to-1 MUX. Selects the active channel's word for serialization. |
+| 3 | `tx_shift_reg` | `tx_shift_reg.v` | Parallel-to-serial shift register, MSB-first. Loads a new word on `load`, otherwise shifts left once per clock. |
+| 4 | `rx_shift_reg` | `rx_shift_reg.v` | Serial-to-parallel shift register, MSB-first. Shifts continuously; on `word_boundary` it latches the word into `rx_data` and pulses `word_done`. |
+| 5 | `tdm_demux` | `tdm_demux.v` | Writes the completed word into the selected channel of `ch_out`, gated by `word_done`. |
+| 6 | `tdm_top` | `tdm_top.v` | Top-level integration: instantiates the five modules above plus the glue logic that derives correctly-phased `mux_select` / `load` / `word_boundary` / `demux_select` from the counter outputs. |
 
 ---
 
 ## 6. Timing Contract (glue layer in `tdm_top`)
 
-`tdm_counter` only produces the raw `bit_count` and `channel_select = bit_count[4:3]`. Because `tx_shift_reg` and
-`rx_shift_reg` are synchronous, three small pieces of glue logic in `tdm_top.v` translate the counter's raw outputs
-into correctly-phased control signals, **without modifying any of the five sub-modules**:
+`tdm_counter` only produces the raw `bit_index` and `channel_select`. Because `tx_shift_reg` and `rx_shift_reg` are
+synchronous, three small pieces of glue logic in `tdm_top.v` translate them into correctly-phased control signals:
 
-| Signal | Formula in `tdm_top` | Why |
-|---|---|---|
-| `mux_select` | `(bit_count + 1)[4:3]` | Look one step ahead so `tx_shift_reg` receives the *upcoming* channel's byte one clock before it starts shifting it out. |
-| `load`, `byte_boundary` | `bit_count[2:0] == 3'b111` | Fire on the **last** bit of the current byte, not the first bit of the next one, so a byte is loaded/captured exactly on time. |
-| `demux_select` | `channel_select` delayed by 1 clock | Keeps the channel selector aligned with `byte_done`, which is itself a registered (1-cycle-late) pulse from `rx_shift_reg`. |
+| Signal | Formula in `tdm_top` | Same as in the 4 × 8 design | Why |
+|---|---|---|---|
+| `mux_select` | `last_bit ? next channel : channel_select` | `(bit_count + 1)[4:3]` | Look one step ahead so `tx_shift_reg` receives the *upcoming* channel's word on the edge that ends the current word. |
+| `load`, `word_boundary` | `last_bit = (bit_index == DATA_WIDTH−1)` | `bit_count[2:0] == 3'b111` | Fire on the **last** bit of the current word, so a word is loaded/captured exactly on time. |
+| `demux_select` | `channel_select` delayed by 1 clock | same | Keeps the channel selector aligned with `word_done`, a registered (1-cycle-late) pulse from `rx_shift_reg`. |
 
 Without the look-ahead the channels rotate permanently by one (inputs `AA/BB/CC/DD` appear as `DD/AA/BB/CC`), which
-is why the glue layer exists. `tx_shift_reg` also **preloads `mux_out` on reset** instead of clearing to `8'h00`:
-`bit_count` is held at 0 during reset, so `mux_select` already points at CH0 and CH0 is the first channel to complete a round trip
-after reset. Details and worked examples are in [docs/tdm_top.md](docs/tdm_top.md).
+is why the glue layer exists. `tx_shift_reg` also **preloads `mux_out` on reset**: the counter is held at 0 during reset,
+so `mux_select` already points at CH0 and CH0 is the first channel to complete a round trip after reset. Details and
+worked examples are in [docs/tdm_top.md](docs/tdm_top.md).
 
 ---
 
 ## 7. Interface Specifications
 
-### 7.1 `tdm_counter`
+`N` = `NUM_CHANNELS`, `W` = `DATA_WIDTH`, `CW` = bits needed for 0 … N−1, `BW` = bits needed for 0 … W−1
+(both at least 1; 2 and 3 for the default 4 × 8). All resets are synchronous and active-high.
 
-![TDM Counter block diagram](image/tdm_counter.png)
-
-| Port | Direction | Width | Description |
-|---|---|---|---|
-| `clk`, `rst` | Input | 1-bit | Shared clock, synchronous active-high reset |
-| `bit_count` | Output | 5-bit | Free-running 0→31→0 counter, sole timing source of the system |
-| `channel_select` | Output | 2-bit | `bit_count[4:3]`, raw/unregistered; not fed directly to `tdm_mux`/`tdm_demux` (see [Section 6](#6-timing-contract-glue-layer-in-tdm_top)) |
-
-### 7.2 `tdm_mux`
-
-![tdm_mux block diagram](image/tdm_mux.png)
+### 7.1 `tdm_top`
 
 | Port | Direction | Width | Description |
 |---|---|---|---|
-| `CH0`..`CH3` | Input | 8-bit ×4 | The 4 parallel input channels |
-| `channel_select` | Input | 2-bit | 00→CH0, 01→CH1, 10→CH2, 11→CH3 |
-| `mux_out` | Output | 8-bit | Selected channel's byte (combinational) |
+| `clk`, `rst` | Input | 1 | Shared clock, synchronous active-high reset |
+| `ch_in` | Input | N×W | Parallel input channels packed `{CH0, CH1, …, CH(N−1)}`, channel 0 = most significant word (default 4 × 8: `{CH0, CH1, CH2, CH3}`) |
+| `TDM_DATA` | Output | 1 | Serial line, MSB of each word first |
+| `ch_out` | Output | N×W | Reconstructed channels, same packing as `ch_in` |
 
-### 7.3 `tx_shift_reg`
+### 7.2 Sub-modules
 
-![tx_shift_reg block diagram](image/tx_shift_reg.png)
-
-| Port | Direction | Width | Description |
-|---|---|---|---|
-| `clk`, `rst` | Input | 1-bit | Shared clock, synchronous active-high reset |
-| `mux_out` | Input | 8-bit | Byte to serialize, from `tdm_mux` |
-| `load` | Input | 1-bit | Pulses once per byte to capture `mux_out` |
-| `serial_out` | Output | 1-bit | `tx_shift[7]`, the current MSB |
-
-Priority inside the always block: **RESET > LOAD > SHIFT**. On reset `tx_shift` preloads `mux_out` (see [Section 6](#6-timing-contract-glue-layer-in-tdm_top)).
-
-### 7.4 `rx_shift_reg`
-
-![rx_shift_reg block diagram](image/rx_shift_reg.png)
-
-| Port | Direction | Width | Description |
-|---|---|---|---|
-| `clk`, `rst` | Input | 1-bit | Shared clock, synchronous active-high reset |
-| `serial_data` | Input | 1-bit | Serial bit sampled once per clock |
-| `byte_boundary` | Input | 1-bit | Same role as `load`, seen from the RX side |
-| `rx_data` | Output | 8-bit | Reconstructed byte, MSB-first |
-| `byte_done` | Output | 1-bit | 1-clock pulse, one cycle after `byte_boundary` was asserted |
-
-### 7.5 `tdm_demux`
-
-![tdm_demux block diagram](image/tdm_demux.png)
-
-| Port | Direction | Width | Description |
-|---|---|---|---|
-| `clk`, `rst` | Input | 1-bit | Shared clock, synchronous active-high reset |
-| `rx_data` | Input | 8-bit | Completed byte from `rx_shift_reg` |
-| `channel_select` | Input | 2-bit | Which `CHx_OUT` to update |
-| `byte_done` | Input | 1-bit | Update gate; writes only when high |
-| `CH0_OUT`..`CH3_OUT` | Output | 8-bit ×4 | Reconstructed channels; unselected channels hold their value |
-
-### 7.6 `tdm_top`
-
-![tdm_top block diagram](image/tdm_top.png)
-
-| Port | Direction | Width | Description |
-|---|---|---|---|
-| `clk`, `rst` | Input | 1-bit | Shared clock, synchronous active-high reset |
-| `CH0`..`CH3` | Input | 8-bit ×4 | The 4 parallel input channels |
-| `TDM_DATA` | Output | 1-bit | Serialized output line |
-| `CH0_OUT`..`CH3_OUT` | Output | 8-bit ×4 | Reconstructed channels |
+| Module | Port | Direction | Width | Description |
+|---|---|---|---|---|
+| `tdm_counter` | `bit_index` | Output | BW | Bit position inside the current word, 0 … W−1 |
+| | `channel_select` | Output | CW | Current channel slot, 0 … N−1 (raw; not fed directly to mux/demux) |
+| | `bit_count` | Output | — | Position inside the frame, `channel_select × W + bit_index` (testbench use only) |
+| `tdm_mux` | `ch_in` / `channel_select` / `mux_out` | In / In / Out | N×W / CW / W | Selected channel's word (combinational) |
+| `tx_shift_reg` | `mux_out`, `load` / `serial_out` | In / Out | W, 1 / 1 | Load on `load`, else shift left; `serial_out = tx_shift[W−1]` |
+| `rx_shift_reg` | `serial_data`, `word_boundary` / `rx_data`, `word_done` | In / Out | 1, 1 / W, 1 | Latch the word on `word_boundary`; `word_done` is a 1-clock pulse one cycle later |
+| `tdm_demux` | `rx_data`, `channel_select`, `word_done` / `ch_out` | In / Out | W, CW, 1 / N×W | Writes only when `word_done` = 1; other channels hold |
 
 ---
 
@@ -252,23 +230,67 @@ differ between simulators from byte-identical source.
 
 ### 8.3 Python golden model (RTL vs reference)
 
-`techbench/tb_tdm_top_filebased.v` reads input vectors from `input/*.hex`, drives the real `tdm_top`, and writes three
-result files. `golden_model/run_verification.py` then compares **every vector** with the independent Python model
-([golden_model/README.md](golden_model/README.md)):
+`techbench/tb_tdm_top_filebased.v` (with `RUN_CASE = 0`) reads packed vectors `{CH0, CH1, …}` from `input/*.hex`,
+drives the real `tdm_top`, and writes three result files. `golden_model/run_verification.py` then compares **every
+vector** with the independent Python model ([golden_model/README.md](golden_model/README.md)). Any size:
+`--channels N --width W` (vectors from `random_regression.py --channels N --width W`).
 
 | Check | RTL side | Golden side |
 |---|---|---|
-| Bit stream | 32 bits on `TDM_DATA` of one frame, from `bit_count == 0` | `serialize()`, compared cycle by cycle |
-| Outputs | settled `CH0_OUT..CH3_OUT` | `deserialize()` result |
-| Latency | clocks until all four outputs are correct | bound `MAX_LATENCY = 41` |
+| Bit stream | N·W bits on `TDM_DATA` of one frame, from `bit_count == 0` | `serialize()`, compared cycle by cycle |
+| Outputs | settled channel outputs | `deserialize()` result |
+| Latency | clocks until every output is correct | bound `N·W + W + 1` (41 for 4 × 8) |
 
 | Run | Vectors | Result | Latency (cycles) |
 |---|---|---|---|
 | `input/input_vectors.hex` (hand-picked, corner values) | 20 | all PASS | cold start 33, mid-stream 40 |
 | `input/random_vectors.hex` (`--n 200 --seed 42`) | 200 | all PASS | cold start 33, mid-stream 32–40 |
+| random, 25 vectors each: 2 × 2, 3 × 12, 5 × 3, 7 × 9, 8 × 16, 4 × 32 | 150 | all PASS | cold start `N·W + 1`, every value ≤ `N·W + W + 1` |
 
 Each run also appends to `golden_model/verification_logs/verification_results.xlsx` (Summary / Results / History sheets).
 A mid-stream latency below 40 appears when a channel's byte equals the previous vector's byte, so that channel needs no update.
+
+### 8.4 One case, compared by eye
+
+The testbench and the golden model read **one** input file, `input/input_vectors.txt`: the size, then the whole message
+of every device (hex). Each message is cut into `DATA_WIDTH`-bit slots; frame f carries slot f of every channel (CH0,
+CH1, … in turn, then back to CH0), and a channel whose message is finished sends 0. The receiver puts the slots of each
+channel back together. All prepared cases are in `input/test_cases.txt`.
+
+```
+// input/input_vectors.txt
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8              // bits per slot
+CH0 = 0123456789abcdef        // 8 slots: 01 23 45 67 89 ab cd ef
+CH1 = deadbeef                // 4 slots, then 00
+CH2 = cafe
+CH3 = 5a
+```
+
+1. Put the case in `input/input_vectors.txt` (copy one from `input/test_cases.txt`).
+2. In `techbench/tb_tdm_top_filebased.v` set `NUM_CHANNELS`, `DATA_WIDTH` to the values of the file. `REPO_DIR` can
+   stay `"."` when the Vivado project is inside the repository (the testbench finds `input/` up to 6 folders above the
+   simulation folder); otherwise set it to the repository folder (absolute path, forward slashes). The testbench stops
+   with an error if the file is not found or its size does not match.
+3. Run the simulation to the end (Vivado: Run Simulation, then **Run All**; Icarus:
+   `iverilog -g2001 -o sim/tb techbench/tb_tdm_top_filebased.v src/*.v && vvp sim/tb` from the repository folder).
+   → `results/rtl_result.txt`
+4. `python golden_model/golden_model.py` → prints every step and writes `results/golden_result.txt`.
+5. Open the two files side by side (VS Code: `code --diff results/rtl_result.txt results/golden_result.txt`).
+   Only the `# source` line differs when RTL and model agree. Both files are overwritten by the next run.
+
+Each result file holds the messages and their slots, a cycle-by-cycle trace (time in ns, frame, channel and bit number
+on `TDM_DATA`, all outputs), every received slot with the cycle in which it reached its output, and the rebuilt
+messages. Which golden-model line corresponds to which RTL line is listed in [docs/golden_vs_rtl.md](docs/golden_vs_rtl.md).
+
+### 8.5 Message-mode regression
+
+`python golden_model/run_message_regression.py` runs the cases of `input/test_cases.txt` and random cases through the
+same testbench and through the golden model, and compares the two result files of every case line by line (only
+`# source` may differ) together with the testbench self-check. Options: `--sizes 4x8,4x16,8x8,3x12`, `--random N`,
+`--seed`, `--max-digits`, `--sim xsim`. Committed run (`verification_logs/message_report.md`, `message_results.xlsx`):
+the 6 library cases and 10 random cases each of 4 × 8, 4 × 16, 8 × 8 and 3 × 12, **46 / 46 PASS**. With the mux
+look-ahead removed on purpose every case fails at the first wrong bit on `TDM_DATA`.
 
 ---
 
@@ -306,6 +328,10 @@ The RTL declares 64 register bits (5 + 8 + 8 + 8 + 1 + 2 + 32), but Vivado repor
 
 Vivado reports: *All user specified timing constraints are met.* TNS, THS and TPWS are all 0.000 ns.
 
+> These figures were measured on the RTL before it was parameterized. The default 4 × 8 configuration of the
+> parameterized RTL is cycle-for-cycle identical in simulation (20 000-cycle lock-step comparison with the old RTL),
+> but its utilization and timing must be re-run in Vivado before the numbers above are quoted for it.
+
 A rough estimate from the setup slack is a minimum clock period of about 10 − 6.574 = 3.43 ns, i.e. roughly 290 MHz.
 This is an estimate derived from one run, not a guaranteed maximum frequency. The 100 MHz clock in `constraints.xdc` is a
 placeholder, not a requirement from the specification, and the I/O delays are not constrained, so input and output paths
@@ -317,7 +343,8 @@ are not part of this result. Keep the `.rpt` file of the run in `results/` as ev
 
 - **Channel order after a mid-stream data change is not fixed.** Adding four input buffer registers that update only when `bit_count` wraps to 0 would remove this.
 - **Rare edge cases are not covered yet:** back-to-back resets, a very short reset pulse, clock jitter. This only needs more test cases.
-- **Channel count and data width are hard-coded.** Can be generalized with `NUM_CHANNELS` / `DATA_WIDTH` parameters and a `generate` loop.
+- **Parameter range.** `NUM_CHANNELS` and `DATA_WIDTH` must both be at least 2. `tb_tdm_top.v` (38 checks) is written for 4 × 8; every other size is checked by `tb_tdm_top_filebased.v` with `run_verification.py --channels --width` and `run_message_regression.py --sizes`. The testbench holds up to 256 vectors, 256 slots and 512 hex digits per message.
+- **XSIM in the Python regressions** is implemented like the existing `--sim xsim` flow but was only run with Icarus Verilog for the message mode.
 - **No error detection and no frame synchronization marker.** A parity bit per byte and a small marker detector are feasible additions.
 - **Out of scope:** CRC error detection and clock recovery / clock-domain crossing for a physically separate TX/RX clock.
 

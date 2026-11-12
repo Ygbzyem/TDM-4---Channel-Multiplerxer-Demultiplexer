@@ -63,10 +63,18 @@ On Windows PowerShell replace `src/*.v` with `(Get-ChildItem src\*.v).FullName`.
 python golden_model/run_verification.py                       # the 20 vectors in input/input_vectors.hex
 python golden_model/random_regression.py --n 200 --seed 42    # create input/random_vectors.hex (200 random vectors)
 python golden_model/run_verification.py --vectors input/random_vectors.hex
+
+# another size: N x W bits per vector, same options for both scripts
+python golden_model/random_regression.py --n 50 --channels 8 --width 16
+python golden_model/run_verification.py --channels 8 --width 16 --vectors input/random_vectors_8x16.hex
+
+# message mode: the cases of input/test_cases.txt + random cases, RTL result file vs golden result file
+python golden_model/run_message_regression.py --sizes 4x8,4x16,8x8,3x12 --random 10
 ```
 
 Add `--sim xsim` to use Vivado. The script compiles `src/*.v` with `techbench/tb_tdm_top_filebased.v`, simulates, then
-compares every vector's 32-bit stream, settled outputs and latency with the golden model. Success looks like:
+compares every vector's bit stream (one frame, N·W bits), settled outputs and latency (limit N·W + W + 1) with the
+golden model. Success looks like:
 
 ```
  vectors passed : 20/20
@@ -94,7 +102,7 @@ For the file-driven testbench `techbench/tb_tdm_top_filebased.v` (golden model f
 
 1. Put the input file and the result files in an **ASCII-only working folder**, e.g. `C:/tdm_work`
    (`copy input\input_vectors.hex C:\tdm_work\`).
-2. In the testbench set the four path parameters to absolute paths with **forward slashes**. Relative paths are resolved
+2. In the testbench set `RUN_CASE = 0` (vector regression) and the four path parameters to absolute paths with **forward slashes**. Relative paths are resolved
    inside Vivado's `*.sim/sim_1/behav/xsim` folder, where the input does not exist (`ERROR: no vectors read`).
 
    ```verilog
@@ -110,6 +118,43 @@ For the file-driven testbench `techbench/tb_tdm_top_filebased.v` (golden model f
    ```bash
    python golden_model/run_verification.py --no-sim --vectors C:/tdm_work/input_vectors.hex --results C:/tdm_work
    ```
+
+### One case from a text file, with waveform
+
+```
+// input/input_vectors.txt
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8              // bits per slot
+CH0 = 0123456789abcdef        // 8 slots: 01 23 45 67 89 ab cd ef
+CH1 = deadbeef                // 4 slots, then 00
+CH2 = cafe
+CH3 = 5a
+```
+
+1. Put the case in `input/input_vectors.txt` (copy one from `input/test_cases.txt`).
+2. In `techbench/tb_tdm_top_filebased.v` set `NUM_CHANNELS`, `DATA_WIDTH` to the values of the file. `REPO_DIR` can
+   stay `"."` when the Vivado project is inside the repository (the testbench finds `input/` up to 6 folders above the
+   simulation folder); otherwise set it to the repository folder (absolute path, forward slashes). The testbench stops
+   with an error if the file is not found or its size does not match.
+3. Run the simulation to the end (Vivado: Run Simulation, then **Run All**; Icarus:
+   `iverilog -g2001 -o sim/tb techbench/tb_tdm_top_filebased.v src/*.v && vvp sim/tb` from the repository folder).
+   → `results/rtl_result.txt`
+4. `python golden_model/golden_model.py` → prints every step and writes `results/golden_result.txt`.
+5. Open the two files side by side (VS Code: `code --diff results/rtl_result.txt results/golden_result.txt`).
+   Only the `# source` line differs when RTL and model agree. Both files are overwritten by the next run.
+
+In Vivado add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`, `TDM_DATA`, `DUT/load`, `DUT/word_done`,
+`DUT/demux_select` and `ch_out` (radix hexadecimal) to the waveform, then `restart` and `run all`. If the waveform
+shows only X, it is zoomed on the first picoseconds: use **Zoom Fit**.
+
+Per channel, the testbench has one scope `CH[0]`, `CH[1]`, ... (Scope window → `tb_tdm_top_filebased` → `CH[0]` →
+select all objects → Add to Wave Window): `sent` (slot the device presents), `received` (its output), `expected`
+(original slot from the input file that the output must hold now), `ok` (1 while `received == expected`),
+`message_in` / `message_out` (whole message and the slots received so far) and `message_ok`. `all_ok` and
+`all_messages_ok` cover every channel; `all_messages_ok` goes to 1 when the last slot arrives (2345 ns for the
+example). A received slot appears N x W + 1 cycles after its frame starts, so `received` lags `sent` by one frame.
+
+The vector regression of section 3 uses the same testbench with `RUN_CASE = 0`; `run_verification.py` sets it.
 
 ## 5. Synthesis (optional, Vivado)
 
