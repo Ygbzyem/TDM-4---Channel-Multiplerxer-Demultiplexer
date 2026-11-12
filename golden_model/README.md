@@ -1,5 +1,14 @@
 # Golden model — how to run it
 
+> **Parameterized model.** `TDMGoldenModel(num_channels=4, data_width=8)` follows the parameters of the RTL.
+> **One case:** `python golden_model/golden_model.py` reads `input/input_vectors.txt` (the same file as the RTL
+> testbench: `NUM_CHANNELS`, `DATA_WIDTH`, one `CHi = message` line per device), prints every step (slots, frames,
+> bits on `TDM_DATA`, rebuilt messages) and writes `results/golden_result.txt` in the same format as the RTL result
+> `results/rtl_result.txt`. Options: `--case FILE`, `--out FILE`.
+> Each step of `golden_model.py` names the RTL line that does the same job; see [../docs/golden_vs_rtl.md](../docs/golden_vs_rtl.md).
+> **Two automatic regressions:** `run_verification.py` (packed vectors, one word per channel, any size with
+> `--channels N --width W`) and `run_message_regression.py` (whole messages per device, many cases, section 8).
+
 The **golden model** is a tiny Python program that knows what the TDM system *should* do.
 It never looks at the Verilog. The RTL simulation (Vivado XSIM or Icarus) writes its results
 to files, and the Python scripts in this folder compare those files with what the golden
@@ -13,8 +22,9 @@ model predicts.
                           (predicts the answer)                  PASS / FAIL
 ```
 
-You do **not** run the golden model on its own. You run `run_verification.py` (or one of the
-compare scripts) from a terminal and it does the comparing for you.
+For one case you run the golden model on its own (`python golden_model/golden_model.py`, see the note above).
+For many cases you run `run_verification.py` or `run_message_regression.py`; they simulate the RTL and do the
+comparing for you.
 
 ## 1. Requirements
 
@@ -28,16 +38,19 @@ compare scripts) from a terminal and it does the comparing for you.
 
 `input/input_vectors.hex` has one test vector per line: 8 hex digits = four bytes,
 `CH0 CH1 CH2 CH3` (CH0 first). `//` starts a comment. Maximum 256 vectors.
+For another size a line is one packed `{CH0, CH1, …, CH(N−1)}` of N × W bits, written with
+⌈N·W/4⌉ hex digits (8 × 16: 32 hex digits).
 
 ```
 a53cf05a      // CH0=A5  CH1=3C  CH2=F0  CH3=5A
 11223344
 ```
 
-Generate random vectors (writes `input/random_vectors.hex`):
+Generate random vectors (writes `input/random_vectors.hex`, or `input/random_vectors_<N>x<W>.hex`):
 
 ```
 python golden_model/random_regression.py --n 200 --seed 42
+python golden_model/random_regression.py --n 200 --channels 8 --width 16
 ```
 
 ## 3. Way A — one command (recommended)
@@ -49,7 +62,11 @@ python golden_model/run_verification.py                    # auto: iverilog if i
 python golden_model/run_verification.py --sim xsim         # force Vivado XSIM
 python golden_model/run_verification.py --sim iverilog     # force Icarus Verilog
 python golden_model/run_verification.py --vectors input/random_vectors.hex
+python golden_model/run_verification.py --channels 8 --width 16 --vectors input/random_vectors_8x16.hex
 ```
+
+`--channels` / `--width` set `NUM_CHANNELS` / `DATA_WIDTH` for the simulation and for the golden model
+(default 4 × 8); the vector file must have the same size.
 
 What it does: compile `src/*.v` + `techbench/tb_tdm_top_filebased.v`, run the simulation, then
 compare the result files with the golden model and write the report.
@@ -144,11 +161,12 @@ adds the new run to the same file; nothing is overwritten.**
 | Sheet | Content |
 |---|---|
 | `Summary` | the latest run (date/time, input, simulator via `--sim-label`, totals, pass rate, latency min / max / average in cycles and ns, latency chart) and the cumulative totals of all runs |
-| `Results` | one row per vector of **every** run: `Run #`, date/time, input file, CH0..CH3, golden and RTL outputs, golden and RTL 32-bit streams, latency (cycles, ns), PASS/FAIL. All checks are Excel formulas; filter by `Run #` to see a single run |
-| `History` | one row per run (date/time, input, vectors, passed, failed, latency, overall) |
+| `Results` | one row per vector of **every** run: `Run #`, date/time, input file, size N × W, the channel words, golden and RTL outputs, golden and RTL bit streams of one frame, latency (cycles, ns) and its allowed maximum, PASS/FAIL. All checks are Excel formulas; filter by `Run #` to see a single run |
+| `History` | one row per run (date/time, input, size, vectors, passed, failed, latency, overall) |
 
-The clock period (10 ns, from `always #5 clk = ~clk` in the testbench) and the latency limit (41) are
-editable yellow cells on `Summary`; your edits are kept between runs. If the workbook is open in Excel
+The clock period (10 ns, from the testbench clock) is an editable yellow cell on `Summary`; your edit is kept
+between runs. The latency limit is `N·W + W + 1` of the run's size (41 for 4 × 8), stored in every row. A workbook
+written by an older version keeps its sheets, renamed `... (old layout)`. If the workbook is open in Excel
 when a run finishes, the results are saved to `verification_results_<date>_<time>.xlsx` instead. In Excel's
 Protected View click *Enable Editing* so the formulas calculate. The file is named after the input
 (`verification_results_<tag>.xlsx`; `input_vectors.hex` gives `verification_results.xlsx`). To start a
@@ -158,13 +176,28 @@ fresh workbook, delete or rename the file.
 
 | Check | RTL side (written by `techbench/tb_tdm_top_filebased.v`) | Golden side |
 |---|---|---|
-| Bit stream | the 32 bits on `TDM_DATA` during one frame starting at `bit_count == 0` (`rtl_stream_*.txt`) | `TDMGoldenModel.serialize()` — MSB first, CH0 → CH3, compared cycle by cycle |
-| Outputs | settled `CH0_OUT..CH3_OUT` (`rtl_output_*.hex`) | channels recovered by `TDMGoldenModel.deserialize()` |
-| Latency | clocks from applying the vector until all four outputs are correct (`rtl_latency_*.txt`) | bound `MAX_LATENCY = 41` (see `latency_checker.py`) |
+| Bit stream | the N·W bits on `TDM_DATA` during one frame starting at `bit_count == 0` (`rtl_stream_*.txt`) | `TDMGoldenModel.serialize()` — MSB first, CH0 → CH(N−1), compared cycle by cycle |
+| Outputs | settled channel outputs (`rtl_output_*.hex`) | channels recovered by `TDMGoldenModel.deserialize()` |
+| Latency | clocks from applying the vector until every output is correct (`rtl_latency_*.txt`) | bound `max_latency(N, W) = N·W + W + 1` (41 for 4 × 8, see `latency_checker.py`) |
 
-Measured latency: cold start 33 clocks, mid-stream change 40 clocks (allowed worst case 41).
+Measured latency (4 × 8): cold start 33 clocks (= N·W + 1), mid-stream change 40 clocks (allowed worst case 41).
 Vector 0 is a cold start (counted from reset release); later vectors change the inputs at
-`bit_count == 24`. A vector that repeats a byte of the previous one can show a shorter latency.
+`bit_count == (N−1)·W` (24 for 4 × 8). A vector that repeats a word of the previous one can show a shorter latency.
+
+### Message mode: many cases (`run_message_regression.py`)
+
+```
+python golden_model/run_message_regression.py                                   # test_cases.txt + 20 random 4 x 8 cases
+python golden_model/run_message_regression.py --sizes 4x8,4x16,8x8,3x12 --random 10
+python golden_model/run_message_regression.py --sim xsim
+```
+
+Every case is a file like `input/input_vectors.txt` (size and one hex message per device). For each case the script
+runs `tb_tdm_top_filebased.v` (RTL result file) and `golden_model.write_result` (golden result file), compares the
+two files line by line (only `# source` may differ) and reads the testbench self-check (`TONG KET ... 0 loi`).
+The cases and both result files are kept in `verification_logs/message_cases/` (git-ignored); the summary goes to
+`verification_logs/message_report.md` and `message_results.xlsx`. With XSIM one snapshot is built per size and
+each case is copied to `input/input_vectors.txt` of a scratch folder (`sim_message/`), so no plusargs are needed.
 
 ## 9. Reading the result
 
@@ -184,12 +217,13 @@ bit stream match, latency, PASS/FAIL). A failing vector is printed as `[FAIL] #<
 
 | File | Role |
 |---|---|
-| `golden_model.py` | Reference model (`serialize`, `deserialize`, `run_frame`) |
-| `run_verification.py` | Compile + simulate + compare in one command |
+| `golden_model.py` | Reference model (`serialize`, `deserialize`, `run_frame`, message slots / frames, `write_result`); run it for one case |
+| `run_verification.py` | Compile + simulate + compare in one command (vector mode, any N × W) |
+| `run_message_regression.py` | Message mode: library + random cases, RTL result file vs golden result file |
 | `compare_output.py` | Full RTL vs golden comparison + report |
 | `export_excel.py` | Writes `verification_results.xlsx` (Summary / Results / History) |
 | `compare_vector_files.py` | Quick outputs-only comparison |
-| `latency_checker.py` / `timing_checker.py` | Latency bound / 32-bit frame length |
+| `latency_checker.py` / `timing_checker.py` | Latency bound `N·W + W + 1` / frame length `N·W` |
 | `report_generator.py` | Writes the Markdown report from the real results |
 | `random_regression.py` | Generates random input vectors |
 | `tdm_cycle_model.py` | Prints the ideal serial stream cycle by cycle (for reading, not checking) |
