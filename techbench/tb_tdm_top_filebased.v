@@ -65,18 +65,21 @@
 // vector {CH0, CH1, ...}, e.g. 4 x 16: "1234abcd00ff8001". Set them at the
 // top of this file, with iverilog -P, or with Vivado -generic_top.
 //
-// ONE CASE FROM A TEXT FILE: CASE_FILE (parameter, or +CASE=<file>) reads
-// one case written as NUM_CHANNELS = .., DATA_WIDTH = .., CH0 = .., CH1 = ..
-// (see input/single_case.txt) instead of the vector list, and writes the
-// trace below to TRACE_FILE (default rtl_result.txt).
-//
-// ONE CASE, BY EYE: TRACE_FILE (parameter, or +TRACE=<file>)
-// set to a path other than "none" also writes, for the FIRST
-// vector (cold start after reset), a cycle-by-cycle trace of one frame plus
-// the receive latency: time, channel and bit on TDM_DATA, all outputs, and
-// the cycle in which each output becomes valid. golden_model/single_case.py
-// writes the expected trace in exactly the same format, so the two files
-// can be opened side by side. +VCD=<file> dumps the waveform.
+// ONE CASE FROM A TEXT FILE (CASE_FILE parameter or +CASE=<file>):
+// instead of the vector list, read one case written as
+//     NUM_CHANNELS = 4
+//     DATA_WIDTH   = 8                  (bits per time slot)
+//     CH0 = 0123456789abcdef            (the whole message of device 0, hex)
+//     CH1 = deadbeef   ...              (messages may have different lengths)
+// Each message is cut into DATA_WIDTH-bit slots. The testbench plays the
+// devices: frame f carries slot f of every channel (CH0, CH1, ... in turn,
+// then back to CH0 for the next slot), a channel whose message is finished
+// sends 0, and the received slots are put back together per channel.
+// The cycle-by-cycle trace and the received messages go to TRACE_FILE
+// (parameter or +TRACE=<file>, default rtl_result.txt).
+// golden_model/single_case.py writes the expected trace of the same case
+// file in exactly the same format, so the two files can be compared by eye.
+// +VCD=<file> dumps the waveform.
 //
 // SETTLE_CYCLES is deliberately a multiple of the frame length (32
 // clocks for 4 x 8): this makes the sampling point land on the same
@@ -182,79 +185,53 @@ module tb_tdm_top_filebased;
     reg [VW-1:0] expected, actual;
     integer    checks, errors;
 
-    // ---------------------------------------------------------
-    // Optional cycle-by-cycle trace of the first vector (+TRACE=<file>)
-    // cycle 0 = first clock cycle after reset is released
-    // ---------------------------------------------------------
-    integer fd_tr, n, i;
-    integer valid_cycle [0:NUM_CHANNELS-1];
-    time    tr_t0, tr_edge;
-
     initial begin
         if ($value$plusargs("VCD=%s", vcd_path)) begin
             $dumpfile(vcd_path);
             $dumpvars(0, tb_tdm_top_filebased);
         end
-        @(negedge rst);                             // trace_path is decided by the main block before reset
-        if (trace_path != "none") begin
-            tr_t0 = $time - 1;                      // reset is released 1 ns after the edge that starts cycle 0
-            fd_tr = $fopen(trace_path, "w");
-            $fdisplay(fd_tr, "# TDM single-case result");
-            $fdisplay(fd_tr, "# source       : RTL simulation (tdm_top)");
-            $fdisplay(fd_tr, "# NUM_CHANNELS : %0d", NUM_CHANNELS);
-            $fdisplay(fd_tr, "# DATA_WIDTH   : %0d", DATA_WIDTH);
-            $fdisplay(fd_tr, "# frame length : %0d cycles", FRAME);
-            $fdisplay(fd_tr, "# clock period : %0d ns", CLK_PERIOD);
-            $fdisplay(fd_tr, "# cycle 0      : first clock cycle after reset is released");
-            $fdisplay(fd_tr, "#");
-            $fdisplay(fd_tr, "# [1] inputs, one line per channel, and the packed vector {CH0, CH1, ...}");
-            for (i = 0; i < NUM_CHANNELS; i = i + 1) begin
-                $fdisplay(fd_tr, "CH%0d = %h", i, vectors[0][(NUM_CHANNELS-1-i)*DATA_WIDTH +: DATA_WIDTH]);
-                valid_cycle[i] = -1;
-            end
-            $fdisplay(fd_tr, "vector = %h", vectors[0]);
-            $fdisplay(fd_tr, "#");
-            $fdisplay(fd_tr, "# [2] cycle-by-cycle trace: ch / bit = channel and bit number on TDM_DATA (MSB first)");
-            $fdisplay(fd_tr, "# cycle  time_ns  ch  bit  TDM_DATA  | outputs during this cycle");
-            for (n = 0; n < FRAME + 2; n = n + 1) begin
-                @(negedge clk);
-                tr_edge = $time - CLK_PERIOD/2;     // rising edge that started this cycle
-                $fwrite(fd_tr, "%7d %8d %3d %4d %9d  |", n, tr_edge - tr_t0,
-                        DUT.u_counter.channel_select, DATA_WIDTH - 1 - DUT.u_counter.bit_index, TDM_DATA);
-                for (i = 0; i < NUM_CHANNELS; i = i + 1)
-                    $fwrite(fd_tr, " CH%0d=%h", i, ch_out[(NUM_CHANNELS-1-i)*DATA_WIDTH +: DATA_WIDTH]);
-                $fwrite(fd_tr, "\n");
-                // word_done = 1 now -> the demux writes channel demux_select at the next
-                // edge, so that output holds the new value from cycle n+1
-                if (DUT.word_done === 1'b1 && valid_cycle[DUT.demux_select] < 0)
-                    valid_cycle[DUT.demux_select] = n + 1;
-            end
-            $fdisplay(fd_tr, "#");
-            $fdisplay(fd_tr, "# [3] output update: first cycle in which CHi_OUT holds the received value");
-            for (i = 0; i < NUM_CHANNELS; i = i + 1)
-                $fdisplay(fd_tr, "CH%0d_OUT = %h  from cycle %0d (%0d ns)", i,
-                          ch_out[(NUM_CHANNELS-1-i)*DATA_WIDTH +: DATA_WIDTH],
-                          valid_cycle[i], valid_cycle[i] * CLK_PERIOD);
-            $fdisplay(fd_tr, "# cold-start latency: %0d cycles (%0d ns)",
-                      valid_cycle[NUM_CHANNELS-1], valid_cycle[NUM_CHANNELS-1] * CLK_PERIOD);
-            $fclose(fd_tr);
-            $display("[filebased-tb] trace of vector #0 written: %0s", trace_path);
-        end
     end
 
-    // ---------------------------------------------------------
-    // ONE CASE from a text file (CASE_FILE / +CASE=<file>):
-    //     NUM_CHANNELS = 4
-    //     DATA_WIDTH   = 8
-    //     CH0 = a5          (hex, no 0x, one line per channel)
-    //     CH1 = 3c   ...
-    // NUM_CHANNELS and DATA_WIDTH come before the CH lines. Lines that match
-    // none of these (e.g. // comments) are ignored.
-    // NUM_CHANNELS / DATA_WIDTH must equal the parameters this testbench
-    // was elaborated with (scripts/vivado_single_case.tcl and
-    // scripts/run_single_case.py set them from the file automatically).
-    // The channels are packed into vectors[0] = {CH0, CH1, ...}.
-    // ---------------------------------------------------------
+    // =========================================================
+    // ONE CASE FROM A TEXT FILE: messages cut into time slots
+    // =========================================================
+    parameter MAX_SLOTS = 256;                   // slots per channel
+    localparam MAX_HEX  = 512;                   // hex digits per message
+
+    reg [DATA_WIDTH-1:0] slot_mem [0:NUM_CHANNELS*MAX_SLOTS-1];   // slot s of channel c at c*MAX_SLOTS+s
+    reg [DATA_WIDTH-1:0] rx_mem   [0:NUM_CHANNELS*MAX_SLOTS-1];   // received words, same layout
+    integer              rx_cycle [0:NUM_CHANNELS*MAX_SLOTS-1];   // cycle in which the output took the word
+    reg [8*MAX_HEX-1:0]  msg_str  [0:NUM_CHANNELS-1];             // message text, right-aligned
+    integer              msg_len  [0:NUM_CHANNELS-1];             // hex digits
+    integer              n_slots  [0:NUM_CHANNELS-1];
+    integer              rx_count [0:NUM_CHANNELS-1];
+    integer              n_frames;
+    integer              fd_tr;
+
+    // ASCII hex digit -> {invalid, value}
+    function [4:0] hex_nibble;
+        input [7:0] c;
+        begin
+            if (c >= 8'h30 && c <= 8'h39)                       // 0..9
+                hex_nibble = {1'b0, c[3:0]};
+            else if ((c >= 8'h61 && c <= 8'h66) || (c >= 8'h41 && c <= 8'h46))   // a..f, A..F
+                hex_nibble = {1'b0, c[3:0] + 4'd9};
+            else
+                hex_nibble = 5'h10;
+        end
+    endfunction
+
+    // bit b (0 = MSB of the first hex digit) of the message of channel c
+    function msg_bit;
+        input integer c;
+        input integer b;
+        reg [4:0] nib;
+        begin
+            nib     = hex_nibble(msg_str[c][8*(msg_len[c] - 1 - b/4) +: 8]);
+            msg_bit = nib[3 - (b % 4)];
+        end
+    endfunction
+
     // NUM_CHANNELS / DATA_WIDTH of the file must match the elaborated parameters
     task check_case_size;
         input integer file_n, file_w;
@@ -264,57 +241,195 @@ module tb_tdm_top_filebased;
                          case_path, file_n, file_w, NUM_CHANNELS, DATA_WIDTH);
                 $display("[filebased-tb]        Write NUM_CHANNELS and DATA_WIDTH before the CH lines, and set the testbench parameters");
                 $display("[filebased-tb]        to the same values (scripts/vivado_single_case.tcl and scripts/run_single_case.py do it for you).");
+                sim_done = 1'b1;
                 $finish;
             end
         end
     endtask
 
-    task read_case_file;
-        integer fd_c, rc, v, ci, file_n, file_w;
-        reg [8*512-1:0] line;
-        reg [511:0]     hv;
-        reg [1023:0]    seen;
-        reg [VW-1:0]    case_vec;
+    task case_error;
+        input [8*200-1:0] msg;
+        input integer     ch;
+        begin
+            $display("[filebased-tb] ERROR: %0s: CH%0d: %0s", case_path, ch, msg);
+            sim_done = 1'b1;
+            $finish;
+        end
+    endtask
+
+    // read the case file and cut every message into DATA_WIDTH-bit slots
+    task read_message_case;
+        integer fd_c, rc, v, ci, c, k, s, b, file_n, file_w, nbits;
+        reg [8*1024-1:0]     line;
+        reg [8*MAX_HEX-1:0]  tok;
+        reg [1023:0]         seen;
+        reg [DATA_WIDTH-1:0] word;
         begin
             fd_c = $fopen(case_path, "r");
             if (fd_c == 0) begin
                 $display("[filebased-tb] ERROR: cannot open case file %0s", case_path);
+                sim_done = 1'b1;
                 $finish;
             end
-            file_n = -1; file_w = -1; seen = 0; case_vec = {VW{1'b0}};
+            file_n = -1; file_w = -1; seen = 0;
             while (!$feof(fd_c)) begin
                 line = 0;
                 rc = $fgets(line, fd_c);
                 if (rc > 0) begin
+                    tok = 0;
                     if ($sscanf(line, " NUM_CHANNELS = %d", v) == 1)
                         file_n = v;
                     else if ($sscanf(line, " DATA_WIDTH = %d", v) == 1)
                         file_w = v;
-                    else if ($sscanf(line, " CH%d = %h", ci, hv) == 2) begin
+                    else if ($sscanf(line, " CH%d = %s", ci, tok) == 2) begin
                         check_case_size(file_n, file_w);
-                        if (ci < 0 || ci >= NUM_CHANNELS) begin
-                            $display("[filebased-tb] ERROR: %0s: CH%0d does not exist (NUM_CHANNELS = %0d)",
-                                     case_path, ci, NUM_CHANNELS);
-                            $finish;
-                        end
-                        if ((hv >> DATA_WIDTH) != 0) begin
-                            $display("[filebased-tb] ERROR: %0s: CH%0d = %0h is wider than DATA_WIDTH = %0d bits",
-                                     case_path, ci, hv, DATA_WIDTH);
-                            $finish;
-                        end
-                        case_vec[(NUM_CHANNELS-1-ci)*DATA_WIDTH +: DATA_WIDTH] = hv[DATA_WIDTH-1:0];
+                        if (ci < 0 || ci >= NUM_CHANNELS) case_error("channel does not exist", ci);
+                        msg_len[ci] = 0;
+                        for (k = 0; k < MAX_HEX; k = k + 1)
+                            if (tok[8*k +: 8] != 8'h00) msg_len[ci] = k + 1;
+                        if (msg_len[ci] == 0) case_error("empty message", ci);
+                        msg_str[ci] = tok;
+                        for (k = 0; k < msg_len[ci]; k = k + 1)
+                            if (hex_nibble(tok[8*k +: 8]) > 5'h0f) case_error("message must be hex digits only (no 0x)", ci);
                         seen[ci] = 1'b1;
                     end
                 end
             end
             $fclose(fd_c);
             check_case_size(file_n, file_w);
-            for (ci = 0; ci < NUM_CHANNELS; ci = ci + 1)
-                if (!seen[ci]) begin
-                    $display("[filebased-tb] ERROR: %0s: line CH%0d = ... is missing", case_path, ci);
-                    $finish;
+
+            n_frames = 0;
+            for (c = 0; c < NUM_CHANNELS; c = c + 1) begin
+                if (!seen[c]) case_error("line is missing", c);
+                nbits      = 4 * msg_len[c];
+                n_slots[c] = (nbits + DATA_WIDTH - 1) / DATA_WIDTH;
+                if (n_slots[c] > MAX_SLOTS) case_error("message longer than MAX_SLOTS slots", c);
+                for (s = 0; s < n_slots[c]; s = s + 1) begin
+                    for (b = 0; b < DATA_WIDTH; b = b + 1) begin
+                        k = s * DATA_WIDTH + b;                    // message bit, MSB first
+                        word[DATA_WIDTH-1-b] = (k < nbits) ? msg_bit(c, k) : 1'b0;   // last slot padded with 0
+                    end
+                    slot_mem[c*MAX_SLOTS + s] = word;
                 end
-            vectors[0] = case_vec;
+                if (n_slots[c] > n_frames) n_frames = n_slots[c];
+            end
+        end
+    endtask
+
+    // put slot f of every channel on the inputs; a finished channel sends 0
+    task apply_frame;
+        input integer f;
+        integer c;
+        begin
+            for (c = 0; c < NUM_CHANNELS; c = c + 1)
+                ch_in[(NUM_CHANNELS-1-c)*DATA_WIDTH +: DATA_WIDTH] =
+                    (f < n_slots[c]) ? slot_mem[c*MAX_SLOTS + f] : {DATA_WIDTH{1'b0}};
+        end
+    endtask
+
+    // run the case, write the trace and the received messages, then stop
+    task run_message_case;
+        integer n, c, s, k, b, pend, last, errs;
+        time    t_start, t_edge;
+        reg [3:0] nib;
+        begin
+            read_message_case;
+            if (trace_path == "none") trace_path = "rtl_result.txt";
+            fd_tr = $fopen(trace_path, "w");
+            if (fd_tr == 0) begin
+                $display("[filebased-tb] ERROR: cannot open %0s", trace_path);
+                sim_done = 1'b1;
+                $finish;
+            end
+            last = n_frames * FRAME + 1;               // cycle in which the last word reaches its output
+
+            $fdisplay(fd_tr, "# TDM single-case result");
+            $fdisplay(fd_tr, "# source       : RTL simulation (tdm_top)");
+            $fdisplay(fd_tr, "# NUM_CHANNELS : %0d", NUM_CHANNELS);
+            $fdisplay(fd_tr, "# DATA_WIDTH   : %0d bits per slot", DATA_WIDTH);
+            $fdisplay(fd_tr, "# frame length : %0d cycles (one slot of every channel)", FRAME);
+            $fdisplay(fd_tr, "# frames       : %0d", n_frames);
+            $fdisplay(fd_tr, "# clock period : %0d ns", CLK_PERIOD);
+            $fdisplay(fd_tr, "# cycle 0      : first clock cycle after reset is released");
+            $fdisplay(fd_tr, "#");
+            $fdisplay(fd_tr, "# [1] messages and their slots (a finished channel sends 0)");
+            for (c = 0; c < NUM_CHANNELS; c = c + 1) begin
+                $fwrite(fd_tr, "CH%0d = ", c);
+                for (k = msg_len[c] - 1; k >= 0; k = k - 1)
+                    $fwrite(fd_tr, "%c", msg_str[c][8*k +: 8]);
+                $fwrite(fd_tr, "  slots:");
+                for (s = 0; s < n_slots[c]; s = s + 1)
+                    $fwrite(fd_tr, " %h", slot_mem[c*MAX_SLOTS + s]);
+                $fwrite(fd_tr, "\n");
+            end
+            $fdisplay(fd_tr, "#");
+            $fdisplay(fd_tr, "# [2] cycle-by-cycle trace: ch / bit = channel and bit number on TDM_DATA (MSB first)");
+            $fdisplay(fd_tr, "# cycle  time_ns  frame  ch  bit  TDM_DATA  | outputs during this cycle");
+
+            for (c = 0; c < NUM_CHANNELS; c = c + 1) rx_count[c] = 0;
+            rst = 1'b1;
+            apply_frame(0);                            // CH0 slot 0 is preloaded during reset
+            repeat (2) @(posedge clk);
+            t_start = $time;                           // rising edge that starts cycle 0
+            #1 rst = 1'b0;
+
+            pend = -1;
+            for (n = 0; n <= last; n = n + 1) begin
+                @(negedge clk);
+                // the word announced by word_done in the previous cycle is on ch_out now
+                if (pend >= 0) begin
+                    rx_mem  [pend*MAX_SLOTS + rx_count[pend]] = ch_out[(NUM_CHANNELS-1-pend)*DATA_WIDTH +: DATA_WIDTH];
+                    rx_cycle[pend*MAX_SLOTS + rx_count[pend]] = n;
+                    rx_count[pend] = rx_count[pend] + 1;
+                end
+                pend = (DUT.word_done === 1'b1) ? DUT.demux_select : -1;
+
+                t_edge = $time - CLK_PERIOD/2;         // rising edge that started this cycle
+                $fwrite(fd_tr, "%7d %8d %6d %3d %4d %9d  |", n, t_edge - t_start, n / FRAME,
+                        DUT.u_counter.channel_select, DATA_WIDTH - 1 - DUT.u_counter.bit_index, TDM_DATA);
+                for (c = 0; c < NUM_CHANNELS; c = c + 1)
+                    $fwrite(fd_tr, " CH%0d=%h", c, ch_out[(NUM_CHANNELS-1-c)*DATA_WIDTH +: DATA_WIDTH]);
+                $fwrite(fd_tr, "\n");
+
+                // the devices present their next slot in the last cycle of a frame,
+                // before the clock edge on which CH0 of the next frame is loaded
+                if (DUT.u_counter.channel_select == NUM_CHANNELS - 1 &&
+                    DUT.u_counter.bit_index == DATA_WIDTH - 1)
+                    apply_frame(n / FRAME + 1);        // after the last frame every channel sends 0
+            end
+
+            $fdisplay(fd_tr, "#");
+            $fdisplay(fd_tr, "# [3] received slots per channel: value(cycle in which the output took it), rebuilt message");
+            errs = 0;
+            for (c = 0; c < NUM_CHANNELS; c = c + 1) begin
+                $fwrite(fd_tr, "CH%0d_OUT :", c);
+                for (s = 0; s < rx_count[c]; s = s + 1) begin
+                    $fwrite(fd_tr, " %h(%0d)", rx_mem[c*MAX_SLOTS + s], rx_cycle[c*MAX_SLOTS + s]);
+                    if (rx_mem[c*MAX_SLOTS + s] !== ((s < n_slots[c]) ? slot_mem[c*MAX_SLOTS + s] : {DATA_WIDTH{1'b0}}))
+                        errs = errs + 1;
+                end
+                $fwrite(fd_tr, "\n");
+                if (rx_count[c] != n_frames) errs = errs + 1;
+            end
+            for (c = 0; c < NUM_CHANNELS; c = c + 1) begin
+                $fwrite(fd_tr, "CH%0d message = ", c);
+                for (k = 0; k < msg_len[c]; k = k + 1) begin     // hex digit k = 4 received bits
+                    for (b = 0; b < 4; b = b + 1)
+                        nib[3-b] = rx_mem[c*MAX_SLOTS + (4*k + b) / DATA_WIDTH][DATA_WIDTH - 1 - (4*k + b) % DATA_WIDTH];
+                    $fwrite(fd_tr, "%h", nib);
+                end
+                $fwrite(fd_tr, "\n");
+            end
+            $fdisplay(fd_tr, "# last output update: cycle %0d (%0d ns)", last, last * CLK_PERIOD);
+            $fclose(fd_tr);
+
+            $display("[filebased-tb] case %0s: %0d channels x %0d bits, %0d frames, trace written: %0s",
+                     case_path, NUM_CHANNELS, DATA_WIDTH, n_frames, trace_path);
+            if (errs == 0) $display("[filebased-tb] [PASS] every channel received its message");
+            else           $display("[filebased-tb] [FAIL] %0d received slot(s) differ from the sent slots", errs);
+            $display(" [filebased-tb] TONG KET: %0d kenh, %0d loi", NUM_CHANNELS, errs);
+            sim_done = 1'b1;
+            $finish;
         end
     endtask
 
@@ -338,14 +453,10 @@ module tb_tdm_top_filebased;
         for (idx = 0; idx < MAX_VECTORS; idx = idx + 1)
             vectors[idx] = {VW{1'bx}};      // sentinel: "not filled by the file"
 
-        if (case_path != "none") begin
-            read_case_file;                                // ONE case: vectors[0] only
-            if (trace_path == "none") trace_path = "rtl_result.txt";
-            $display("[filebased-tb] case file %0s (%0d channels x %0d bits)",
-                     case_path, NUM_CHANNELS, DATA_WIDTH);
-        end
-        else
-            $readmemh(in_path, vectors);
+        if (case_path != "none")
+            run_message_case;                              // ONE case from a text file; ends with $finish
+
+        $readmemh(in_path, vectors);
 
         // auto-detect vector count: stop at the first still-unfilled
         // (all-X) entry, so the file's own length drives the loop -
@@ -363,8 +474,7 @@ module tb_tdm_top_filebased;
             $display("[filebased-tb] ERROR: no vectors read from %0s (missing/empty file, or MAX_VECTORS too small)", in_path);
             $finish;
         end
-        $display("[filebased-tb] loaded %0d test vector(s) from %0s", num_vectors,
-                 (case_path != "none") ? case_path : in_path);
+        $display("[filebased-tb] loaded %0d test vector(s) from %0s", num_vectors, in_path);
 
         // -----------------------------------------------------
         // 2) open the result file

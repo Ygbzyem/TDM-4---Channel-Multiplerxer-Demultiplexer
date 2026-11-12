@@ -1,6 +1,8 @@
 # =============================================================
 # vivado_single_case.tcl - run ONE case from a text file in the Vivado GUI.
 #
+# A case gives every device a whole message (hex); the testbench cuts it into
+# DATA_WIDTH-bit slots and sends slot f of every channel in frame f.
 # Reads NUM_CHANNELS / DATA_WIDTH / CH0.. from the case file, sets them on the
 # simulation, runs tb_tdm_top_filebased.v to $finish, then (if Python is on the
 # PATH) writes the golden-model result for the same file. Nothing is compared:
@@ -10,18 +12,18 @@
 # techbench/tb_tdm_top_filebased.v as a simulation source):
 #
 #   source C:/path/to/repo/scripts/vivado_single_case.tcl
-#       -> uses input/single_case.txt
-#   set case_file C:/path/to/repo/input/single_case_4x16.txt
+#       -> uses input/message_case.txt
+#   set case_file C:/path/to/repo/input/message_case_4x16.txt
 #   source C:/path/to/repo/scripts/vivado_single_case.tcl
 #       -> uses the file you set
 #
-# Results: results/single_case/<N>x<W>/rtl_result.txt and golden_result.txt
+# Results: results/single_case/<case file name>/rtl_result.txt and golden_result.txt
 # Use a project path without accents.
 # =============================================================
 
 set tdm_repo [file dirname [file dirname [file normalize [info script]]]]
 if {![info exists case_file]} {
-    set case_file [file join $tdm_repo input single_case.txt]
+    set case_file [file join $tdm_repo input message_case.txt]
 }
 set case_file [file normalize $case_file]
 
@@ -38,7 +40,7 @@ close $fp
 if {$tdm_n eq "" || $tdm_w eq ""} {
     error "$case_file must contain NUM_CHANNELS = .. and DATA_WIDTH = .."
 }
-set out_dir [file join $tdm_repo results single_case "${tdm_n}x${tdm_w}"]
+set out_dir [file join $tdm_repo results single_case [file rootname [file tail $case_file]]]
 file mkdir $out_dir
 puts "Case file : $case_file ($tdm_n channels x $tdm_w bits)"
 puts "Results in: $out_dir"
@@ -83,10 +85,7 @@ set_property top tb_tdm_top_filebased $sim_fs
 set_property generic "NUM_CHANNELS=$tdm_n DATA_WIDTH=$tdm_w" $sim_fs
 set sim_opts [join [list \
     -testplusarg CASE=$case_file \
-    -testplusarg TRACE=$out_dir/rtl_result.txt \
-    -testplusarg OUT_HEX=$out_dir/rtl_output_vectors.hex \
-    -testplusarg OUT_STREAM=$out_dir/rtl_stream_vectors.txt \
-    -testplusarg OUT_LAT=$out_dir/rtl_latency_vectors.txt] " "]
+    -testplusarg TRACE=$out_dir/rtl_result.txt] " "]
 set_property -name {xsim.simulate.xsim.more_options} -value $sim_opts -objects $sim_fs
 
 # ---- run the simulation to $finish

@@ -1,0 +1,106 @@
+# TDM single-case result
+# source       : golden model (Python)
+# NUM_CHANNELS : 8
+# DATA_WIDTH   : 8 bits per slot
+# frame length : 64 cycles (one slot of every channel)
+# frames       : 1
+# clock period : 10 ns
+# cycle 0      : first clock cycle after reset is released
+#
+# [1] messages and their slots (a finished channel sends 0)
+CH0 = 01  slots: 01
+CH1 = 23  slots: 23
+CH2 = 45  slots: 45
+CH3 = 67  slots: 67
+CH4 = 89  slots: 89
+CH5 = ab  slots: ab
+CH6 = cd  slots: cd
+CH7 = ef  slots: ef
+#
+# [2] cycle-by-cycle trace: ch / bit = channel and bit number on TDM_DATA (MSB first)
+# cycle  time_ns  frame  ch  bit  TDM_DATA  | outputs during this cycle
+      0        0      0   0    7         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      1       10      0   0    6         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      2       20      0   0    5         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      3       30      0   0    4         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      4       40      0   0    3         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      5       50      0   0    2         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      6       60      0   0    1         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      7       70      0   0    0         1  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      8       80      0   1    7         0  | CH0=00 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+      9       90      0   1    6         0  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     10      100      0   1    5         1  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     11      110      0   1    4         0  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     12      120      0   1    3         0  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     13      130      0   1    2         0  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     14      140      0   1    1         1  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     15      150      0   1    0         1  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     16      160      0   2    7         0  | CH0=01 CH1=00 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     17      170      0   2    6         1  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     18      180      0   2    5         0  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     19      190      0   2    4         0  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     20      200      0   2    3         0  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     21      210      0   2    2         1  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     22      220      0   2    1         0  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     23      230      0   2    0         1  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     24      240      0   3    7         0  | CH0=01 CH1=23 CH2=00 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     25      250      0   3    6         1  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     26      260      0   3    5         1  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     27      270      0   3    4         0  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     28      280      0   3    3         0  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     29      290      0   3    2         1  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     30      300      0   3    1         1  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     31      310      0   3    0         1  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     32      320      0   4    7         1  | CH0=01 CH1=23 CH2=45 CH3=00 CH4=00 CH5=00 CH6=00 CH7=00
+     33      330      0   4    6         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     34      340      0   4    5         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     35      350      0   4    4         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     36      360      0   4    3         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     37      370      0   4    2         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     38      380      0   4    1         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     39      390      0   4    0         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     40      400      0   5    7         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=00 CH5=00 CH6=00 CH7=00
+     41      410      0   5    6         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     42      420      0   5    5         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     43      430      0   5    4         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     44      440      0   5    3         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     45      450      0   5    2         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     46      460      0   5    1         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     47      470      0   5    0         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     48      480      0   6    7         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=00 CH6=00 CH7=00
+     49      490      0   6    6         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     50      500      0   6    5         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     51      510      0   6    4         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     52      520      0   6    3         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     53      530      0   6    2         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     54      540      0   6    1         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     55      550      0   6    0         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     56      560      0   7    7         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=00 CH7=00
+     57      570      0   7    6         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     58      580      0   7    5         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     59      590      0   7    4         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     60      600      0   7    3         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     61      610      0   7    2         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     62      620      0   7    1         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     63      630      0   7    0         1  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     64      640      1   0    7         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=00
+     65      650      1   0    6         0  | CH0=01 CH1=23 CH2=45 CH3=67 CH4=89 CH5=ab CH6=cd CH7=ef
+#
+# [3] received slots per channel: value(cycle in which the output took it), rebuilt message
+CH0_OUT : 01(9)
+CH1_OUT : 23(17)
+CH2_OUT : 45(25)
+CH3_OUT : 67(33)
+CH4_OUT : 89(41)
+CH5_OUT : ab(49)
+CH6_OUT : cd(57)
+CH7_OUT : ef(65)
+CH0 message = 01
+CH1 message = 23
+CH2 message = 45
+CH3 message = 67
+CH4 message = 89
+CH5 message = ab
+CH6 message = cd
+CH7 message = ef
+# last output update: cycle 65 (650 ns)

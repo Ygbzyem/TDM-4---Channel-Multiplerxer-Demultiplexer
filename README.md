@@ -45,8 +45,8 @@ with Vivado.
 ```bash
 python scripts/run_tests.py                      # system testbench -> 38/38 PASS
 python golden_model/run_verification.py          # RTL vs Python golden model -> ALL CHECKS PASSED
-python scripts/run_single_case.py                # one case from input/single_case.txt: two result files to compare
-python scripts/run_single_case.py --case input/single_case_4x16.txt   # same, 4 channels x 16 bits (2 bytes)
+python scripts/run_single_case.py                # messages of input/message_case.txt: two result files to compare
+python scripts/run_single_case.py --case input/message_case_4x16.txt  # same, 2 bytes per slot
 ```
 
 Add `--sim xsim` to either command to use Vivado XSIM instead of Icarus. The full guide, including
@@ -130,8 +130,8 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 │   ├── single_case.py           #   golden trace for one case file, same format as the testbench trace
 │   ├── compare_output.py, export_excel.py, ...
 │   └── verification_logs/       #   latest result files, report and Excel workbook
-├── input/                       # input vectors (input_vectors.hex, random_vectors.hex) and one-case files (single_case*.txt)
-├── results/                     # Vivado reports, screenshots, single_case/<N>x<W>/ result files
+├── input/                       # input vectors (input_vectors.hex, random_vectors.hex) and case files (message_case*.txt, single_case*.txt)
+├── results/                     # Vivado reports, screenshots, single_case/<case>/ result files
 ├── scripts/
 │   ├── run_tests.py             #   runs every self-checking testbench
 │   ├── run_single_case.py       #   one case through RTL (Icarus or XSIM) and golden model, two files to compare by eye
@@ -252,33 +252,35 @@ This automatic flow checks the default 4 × 8 configuration.
 
 ### 8.4 One case, compared by eye (`python scripts/run_single_case.py`)
 
-One case is written in a small text file: the size, then one line per channel.
+One case is written in a small text file: the size, then the whole message of every device (hex). Each message is
+cut into `DATA_WIDTH`-bit slots; frame f carries slot f of every channel (CH0, CH1, … in turn, then back to CH0), and a
+channel whose message is finished sends 0. The receiver puts the slots of each channel back together.
 
 ```
-// input/single_case.txt
+// input/message_case.txt
 NUM_CHANNELS = 4
 DATA_WIDTH   = 8
-CH0 = a5
-CH1 = 3c
-CH2 = f0
+CH0 = 0123456789abcdef      // 8 slots: 01 23 45 67 89 ab cd ef
+CH1 = deadbeef              // 4 slots, then 0
+CH2 = cafe
 CH3 = 5a
 ```
 
 The existing file-driven testbench `techbench/tb_tdm_top_filebased.v` (with `CASE_FILE` / `+CASE=<file>`) and
 `golden_model/single_case.py` read **the same case file** and each write a plain-text result file in **the same
-format**: the inputs, a cycle-by-cycle trace (time in ns, channel and bit number on `TDM_DATA`, all outputs) and the
-cycle in which every output becomes valid. Nothing is compared automatically; open the two files side by side
+format**: the messages and their slots, a cycle-by-cycle trace (time in ns, frame, channel and bit number on
+`TDM_DATA`, all outputs), every received slot with the cycle in which it reached its output, and the rebuilt messages. Nothing is compared automatically; open the two files side by side
 (VS Code *Compare Selected*, WinMerge, Notepad++ Compare). Only the `# source` line differs when RTL and model agree.
 
 ```bash
-python scripts/run_single_case.py                                   # input/single_case.txt (4 x 8), Icarus
-python scripts/run_single_case.py --case input/single_case_4x16.txt # 4 x 16
+python scripts/run_single_case.py                                    # input/message_case.txt (4 x 8), Icarus
+python scripts/run_single_case.py --case input/message_case_4x16.txt # 2 bytes per slot
 python scripts/run_single_case.py --sim xsim                        # Vivado XSIM from the command line
 ```
 
 In the Vivado GUI: `source scripts/vivado_single_case.tcl` in the Tcl console (optionally `set case_file ...` first);
 it sets the parameters from the case file, runs the simulation with its waveform and writes the golden file too.
-Results go to `results/single_case/<N>x<W>/`. Which golden-model line corresponds to which RTL line is listed in
+Results go to `results/single_case/<case file name>/`. Which golden-model line corresponds to which RTL line is listed in
 [docs/golden_vs_rtl.md](docs/golden_vs_rtl.md).
 
 ---

@@ -1,0 +1,9 @@
+// TDM message case: 4 channels, 16 bits (2 bytes) per slot.
+// Messages may have different lengths; a finished channel sends 0.
+// CH3 has 8 bits only: its single slot is padded with 0 (5a00).
+NUM_CHANNELS = 4
+DATA_WIDTH   = 16
+CH0 = 0123456789abcdef
+CH1 = deadbeef
+CH2 = cafe
+CH3 = 5a

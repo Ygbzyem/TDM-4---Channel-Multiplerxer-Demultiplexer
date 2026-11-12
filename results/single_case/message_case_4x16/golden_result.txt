@@ -1,0 +1,286 @@
+# TDM single-case result
+# source       : golden model (Python)
+# NUM_CHANNELS : 4
+# DATA_WIDTH   : 16 bits per slot
+# frame length : 64 cycles (one slot of every channel)
+# frames       : 4
+# clock period : 10 ns
+# cycle 0      : first clock cycle after reset is released
+#
+# [1] messages and their slots (a finished channel sends 0)
+CH0 = 0123456789abcdef  slots: 0123 4567 89ab cdef
+CH1 = deadbeef  slots: dead beef
+CH2 = cafe  slots: cafe
+CH3 = 5a  slots: 5a00
+#
+# [2] cycle-by-cycle trace: ch / bit = channel and bit number on TDM_DATA (MSB first)
+# cycle  time_ns  frame  ch  bit  TDM_DATA  | outputs during this cycle
+      0        0      0   0   15         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      1       10      0   0   14         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      2       20      0   0   13         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      3       30      0   0   12         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      4       40      0   0   11         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      5       50      0   0   10         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      6       60      0   0    9         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      7       70      0   0    8         1  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      8       80      0   0    7         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+      9       90      0   0    6         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     10      100      0   0    5         1  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     11      110      0   0    4         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     12      120      0   0    3         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     13      130      0   0    2         0  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     14      140      0   0    1         1  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     15      150      0   0    0         1  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     16      160      0   1   15         1  | CH0=0000 CH1=0000 CH2=0000 CH3=0000
+     17      170      0   1   14         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     18      180      0   1   13         0  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     19      190      0   1   12         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     20      200      0   1   11         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     21      210      0   1   10         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     22      220      0   1    9         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     23      230      0   1    8         0  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     24      240      0   1    7         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     25      250      0   1    6         0  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     26      260      0   1    5         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     27      270      0   1    4         0  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     28      280      0   1    3         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     29      290      0   1    2         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     30      300      0   1    1         0  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     31      310      0   1    0         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     32      320      0   2   15         1  | CH0=0123 CH1=0000 CH2=0000 CH3=0000
+     33      330      0   2   14         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     34      340      0   2   13         0  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     35      350      0   2   12         0  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     36      360      0   2   11         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     37      370      0   2   10         0  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     38      380      0   2    9         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     39      390      0   2    8         0  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     40      400      0   2    7         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     41      410      0   2    6         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     42      420      0   2    5         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     43      430      0   2    4         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     44      440      0   2    3         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     45      450      0   2    2         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     46      460      0   2    1         1  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     47      470      0   2    0         0  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     48      480      0   3   15         0  | CH0=0123 CH1=dead CH2=0000 CH3=0000
+     49      490      0   3   14         1  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     50      500      0   3   13         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     51      510      0   3   12         1  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     52      520      0   3   11         1  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     53      530      0   3   10         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     54      540      0   3    9         1  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     55      550      0   3    8         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     56      560      0   3    7         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     57      570      0   3    6         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     58      580      0   3    5         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     59      590      0   3    4         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     60      600      0   3    3         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     61      610      0   3    2         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     62      620      0   3    1         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     63      630      0   3    0         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     64      640      1   0   15         0  | CH0=0123 CH1=dead CH2=cafe CH3=0000
+     65      650      1   0   14         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     66      660      1   0   13         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     67      670      1   0   12         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     68      680      1   0   11         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     69      690      1   0   10         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     70      700      1   0    9         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     71      710      1   0    8         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     72      720      1   0    7         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     73      730      1   0    6         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     74      740      1   0    5         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     75      750      1   0    4         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     76      760      1   0    3         0  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     77      770      1   0    2         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     78      780      1   0    1         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     79      790      1   0    0         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     80      800      1   1   15         1  | CH0=0123 CH1=dead CH2=cafe CH3=5a00
+     81      810      1   1   14         0  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     82      820      1   1   13         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     83      830      1   1   12         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     84      840      1   1   11         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     85      850      1   1   10         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     86      860      1   1    9         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     87      870      1   1    8         0  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     88      880      1   1    7         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     89      890      1   1    6         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     90      900      1   1    5         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     91      910      1   1    4         0  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     92      920      1   1    3         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     93      930      1   1    2         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     94      940      1   1    1         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     95      950      1   1    0         1  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     96      960      1   2   15         0  | CH0=4567 CH1=dead CH2=cafe CH3=5a00
+     97      970      1   2   14         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+     98      980      1   2   13         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+     99      990      1   2   12         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    100     1000      1   2   11         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    101     1010      1   2   10         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    102     1020      1   2    9         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    103     1030      1   2    8         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    104     1040      1   2    7         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    105     1050      1   2    6         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    106     1060      1   2    5         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    107     1070      1   2    4         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    108     1080      1   2    3         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    109     1090      1   2    2         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    110     1100      1   2    1         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    111     1110      1   2    0         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    112     1120      1   3   15         0  | CH0=4567 CH1=beef CH2=cafe CH3=5a00
+    113     1130      1   3   14         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    114     1140      1   3   13         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    115     1150      1   3   12         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    116     1160      1   3   11         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    117     1170      1   3   10         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    118     1180      1   3    9         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    119     1190      1   3    8         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    120     1200      1   3    7         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    121     1210      1   3    6         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    122     1220      1   3    5         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    123     1230      1   3    4         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    124     1240      1   3    3         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    125     1250      1   3    2         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    126     1260      1   3    1         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    127     1270      1   3    0         0  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    128     1280      2   0   15         1  | CH0=4567 CH1=beef CH2=0000 CH3=5a00
+    129     1290      2   0   14         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    130     1300      2   0   13         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    131     1310      2   0   12         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    132     1320      2   0   11         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    133     1330      2   0   10         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    134     1340      2   0    9         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    135     1350      2   0    8         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    136     1360      2   0    7         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    137     1370      2   0    6         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    138     1380      2   0    5         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    139     1390      2   0    4         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    140     1400      2   0    3         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    141     1410      2   0    2         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    142     1420      2   0    1         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    143     1430      2   0    0         1  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    144     1440      2   1   15         0  | CH0=4567 CH1=beef CH2=0000 CH3=0000
+    145     1450      2   1   14         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    146     1460      2   1   13         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    147     1470      2   1   12         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    148     1480      2   1   11         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    149     1490      2   1   10         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    150     1500      2   1    9         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    151     1510      2   1    8         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    152     1520      2   1    7         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    153     1530      2   1    6         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    154     1540      2   1    5         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    155     1550      2   1    4         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    156     1560      2   1    3         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    157     1570      2   1    2         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    158     1580      2   1    1         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    159     1590      2   1    0         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    160     1600      2   2   15         0  | CH0=89ab CH1=beef CH2=0000 CH3=0000
+    161     1610      2   2   14         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    162     1620      2   2   13         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    163     1630      2   2   12         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    164     1640      2   2   11         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    165     1650      2   2   10         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    166     1660      2   2    9         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    167     1670      2   2    8         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    168     1680      2   2    7         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    169     1690      2   2    6         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    170     1700      2   2    5         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    171     1710      2   2    4         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    172     1720      2   2    3         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    173     1730      2   2    2         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    174     1740      2   2    1         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    175     1750      2   2    0         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    176     1760      2   3   15         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    177     1770      2   3   14         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    178     1780      2   3   13         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    179     1790      2   3   12         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    180     1800      2   3   11         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    181     1810      2   3   10         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    182     1820      2   3    9         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    183     1830      2   3    8         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    184     1840      2   3    7         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    185     1850      2   3    6         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    186     1860      2   3    5         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    187     1870      2   3    4         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    188     1880      2   3    3         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    189     1890      2   3    2         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    190     1900      2   3    1         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    191     1910      2   3    0         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    192     1920      3   0   15         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    193     1930      3   0   14         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    194     1940      3   0   13         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    195     1950      3   0   12         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    196     1960      3   0   11         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    197     1970      3   0   10         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    198     1980      3   0    9         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    199     1990      3   0    8         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    200     2000      3   0    7         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    201     2010      3   0    6         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    202     2020      3   0    5         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    203     2030      3   0    4         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    204     2040      3   0    3         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    205     2050      3   0    2         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    206     2060      3   0    1         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    207     2070      3   0    0         1  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    208     2080      3   1   15         0  | CH0=89ab CH1=0000 CH2=0000 CH3=0000
+    209     2090      3   1   14         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    210     2100      3   1   13         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    211     2110      3   1   12         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    212     2120      3   1   11         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    213     2130      3   1   10         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    214     2140      3   1    9         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    215     2150      3   1    8         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    216     2160      3   1    7         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    217     2170      3   1    6         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    218     2180      3   1    5         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    219     2190      3   1    4         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    220     2200      3   1    3         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    221     2210      3   1    2         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    222     2220      3   1    1         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    223     2230      3   1    0         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    224     2240      3   2   15         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    225     2250      3   2   14         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    226     2260      3   2   13         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    227     2270      3   2   12         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    228     2280      3   2   11         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    229     2290      3   2   10         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    230     2300      3   2    9         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    231     2310      3   2    8         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    232     2320      3   2    7         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    233     2330      3   2    6         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    234     2340      3   2    5         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    235     2350      3   2    4         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    236     2360      3   2    3         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    237     2370      3   2    2         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    238     2380      3   2    1         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    239     2390      3   2    0         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    240     2400      3   3   15         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    241     2410      3   3   14         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    242     2420      3   3   13         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    243     2430      3   3   12         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    244     2440      3   3   11         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    245     2450      3   3   10         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    246     2460      3   3    9         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    247     2470      3   3    8         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    248     2480      3   3    7         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    249     2490      3   3    6         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    250     2500      3   3    5         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    251     2510      3   3    4         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    252     2520      3   3    3         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    253     2530      3   3    2         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    254     2540      3   3    1         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    255     2550      3   3    0         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    256     2560      4   0   15         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+    257     2570      4   0   14         0  | CH0=cdef CH1=0000 CH2=0000 CH3=0000
+#
+# [3] received slots per channel: value(cycle in which the output took it), rebuilt message
+CH0_OUT : 0123(17) 4567(81) 89ab(145) cdef(209)
+CH1_OUT : dead(33) beef(97) 0000(161) 0000(225)
+CH2_OUT : cafe(49) 0000(113) 0000(177) 0000(241)
+CH3_OUT : 5a00(65) 0000(129) 0000(193) 0000(257)
+CH0 message = 0123456789abcdef
+CH1 message = deadbeef
+CH2 message = cafe
+CH3 message = 5a
+# last output update: cycle 257 (2570 ns)

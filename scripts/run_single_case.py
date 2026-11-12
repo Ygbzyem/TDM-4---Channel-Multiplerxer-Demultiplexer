@@ -2,25 +2,27 @@ r"""Run ONE case, written in a small text file, through the RTL and through the 
 model, and write two result files in the same format, for a side-by-side comparison by
 eye. Nothing is compared automatically.
 
+A case gives every device a whole message (hex). Each message is cut into DATA_WIDTH-bit
+slots; frame f carries slot f of every channel, CH0 first, and a finished channel sends 0.
+
 The RTL side is the existing file-driven testbench techbench/tb_tdm_top_filebased.v in
 CASE_FILE mode; NUM_CHANNELS and DATA_WIDTH are taken from the case file.
 
-    python scripts/run_single_case.py                                   # input/single_case.txt (4 x 8)
-    python scripts/run_single_case.py --case input/single_case_4x16.txt # 4 channels x 16 bits
+    python scripts/run_single_case.py                                   # input/message_case.txt (4 x 8)
+    python scripts/run_single_case.py --case input/message_case_4x16.txt # 2 bytes per slot
+    python scripts/run_single_case.py --case input/single_case.txt      # one slot per channel
     python scripts/run_single_case.py --sim xsim                        # Vivado XSIM instead of Icarus
 
 Case file:
     NUM_CHANNELS = 4
-    DATA_WIDTH   = 8
-    CH0 = a5        hex without 0x, one line per channel
-    CH1 = 3c   ...
+    DATA_WIDTH   = 8                   bits per slot
+    CH0 = 0123456789abcdef             message of device 0, hex without 0x
+    CH1 = deadbeef   ...               messages may have different lengths
 
-Writes to results/single_case/<N>x<W>/ :
-    rtl_result.txt      cycle-by-cycle trace from tb_tdm_top_filebased.v (+TRACE)
-    golden_result.txt   the same trace predicted by golden_model/single_case.py
+Writes to results/single_case/<case file name>/ (e.g. results/single_case/message_case/):
+    rtl_result.txt      trace and received messages from tb_tdm_top_filebased.v
+    golden_result.txt   the same, predicted by golden_model/single_case.py
     waveform.vcd        waveform of the RTL run (Icarus only; open it with GTKWave)
-    rtl_output_vectors.hex, rtl_stream_vectors.txt, rtl_latency_vectors.txt
-                        the usual result files of the file-driven testbench
 
 Then open rtl_result.txt and golden_result.txt next to each other (VS Code: select both
 files > right click > Compare Selected; Notepad++ Compare plugin; WinMerge). Only the
@@ -47,10 +49,7 @@ SRCS = sorted((ROOT / "src").glob("*.v"))
 
 
 def plusargs(inp, out_dir):
-    o = lambda name: (out_dir / name).as_posix()
-    return {"CASE": inp, "OUT_HEX": o("rtl_output_vectors.hex"),
-            "OUT_STREAM": o("rtl_stream_vectors.txt"), "OUT_LAT": o("rtl_latency_vectors.txt"),
-            "TRACE": o("rtl_result.txt")}
+    return {"CASE": inp, "TRACE": (out_dir / "rtl_result.txt").as_posix()}
 
 
 def run_iverilog(tools, n, w, inp, out_dir):
@@ -97,8 +96,8 @@ def run_xsim(tools, n, w, inp, out_dir):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--case", default=str(ROOT / "input" / "single_case.txt"), help="case file")
-    ap.add_argument("--out-dir", help="output folder (default results/single_case/<N>x<W>)")
+    ap.add_argument("--case", default=str(ROOT / "input" / "message_case.txt"), help="case file")
+    ap.add_argument("--out-dir", help="output folder (default results/single_case/<case file name>)")
     ap.add_argument("--sim", choices=["iverilog", "xsim"], default="iverilog")
     a = ap.parse_args(argv)
 
@@ -106,7 +105,7 @@ def main(argv=None):
     if not case.exists():
         sys.exit(f"ERROR: case file {case} not found")
     n, w, _ = single_case.read_case(case)
-    out_dir = Path(a.out_dir).resolve() if a.out_dir else ROOT / "results" / "single_case" / f"{n}x{w}"
+    out_dir = Path(a.out_dir).resolve() if a.out_dir else ROOT / "results" / "single_case" / case.stem
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Case: {n} channels x {w} bits, file {case}")

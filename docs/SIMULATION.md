@@ -113,16 +113,17 @@ For the file-driven testbench `techbench/tb_tdm_top_filebased.v` (golden model f
 
 ### One case from a text file, with waveform
 
-Write the case in a text file (or edit `input/single_case.txt`): the size first, then one line per channel, hex
-without `0x`.
+Write the case in a text file (or edit `input/message_case.txt`): the size first, then the whole message of every
+device, hex without `0x`. Messages are cut into `DATA_WIDTH`-bit slots; frame f carries slot f of every channel and a
+finished channel sends 0.
 
 ```
-// input/single_case.txt
+// input/message_case.txt
 NUM_CHANNELS = 4
 DATA_WIDTH   = 8
-CH0 = a5
-CH1 = 3c
-CH2 = f0
+CH0 = 0123456789abcdef
+CH1 = deadbeef
+CH2 = cafe
 CH3 = 5a
 ```
 
@@ -130,13 +131,13 @@ CH3 = 5a
 source, type in the Tcl console (use your own repository path, forward slashes, no accents):
 
 ```tcl
-set case_file C:/path/to/repo/input/single_case_4x16.txt     ;# optional, default input/single_case.txt
+set case_file C:/path/to/repo/input/message_case_4x16.txt    ;# optional, default input/message_case.txt
 source C:/path/to/repo/scripts/vivado_single_case.tcl
 ```
 
 The script reads `NUM_CHANNELS` and `DATA_WIDTH` from the file, sets them as simulation parameters, sets the file
 paths, launches the simulation and runs it to `$finish`, then runs the golden model if Python is on the PATH. Both
-files are written to `results/single_case/<N>x<W>/`. Add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`,
+files are written to `results/single_case/<case file name>/`. Add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`,
 `TDM_DATA`, `DUT/load`, `DUT/word_done`, `DUT/demux_select` and `ch_out` (radix hexadecimal) to the waveform, then
 `restart` and `run all`.
 
@@ -147,7 +148,7 @@ size must equal the one in the case file, otherwise the testbench stops with an 
 python golden_model/single_case.py --case C:/path/to/case.txt --out C:/path/to/golden_result.txt
 ```
 
-**Icarus Verilog:** `python scripts/run_single_case.py --case input/single_case_4x16.txt` does both steps.
+**Icarus Verilog:** `python scripts/run_single_case.py --case input/message_case_4x16.txt` does both steps.
 
 ## 5. Synthesis (optional, Vivado)
 
