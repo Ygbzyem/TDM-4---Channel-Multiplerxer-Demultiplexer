@@ -67,7 +67,8 @@ module tdm_counter #(
     // synthesis translate_off
     initial begin
         if (NUM_CHANNELS < 2 || DATA_WIDTH < 2) begin
-            $display("ERROR: tdm_counter needs NUM_CHANNELS >= 2 and DATA_WIDTH >= 2");
+            $display("ERROR: tdm_counter needs NUM_CHANNELS >= 2 and DATA_WIDTH >= 2 (got %0d x %0d)",
+                     NUM_CHANNELS, DATA_WIDTH);
             $finish;
         end
     end

@@ -165,8 +165,8 @@ def simulate_xsim(vectors, paths, n=4, w=8):
     for f in files:
         text = f.read_text(encoding="utf-8", errors="replace")
         if f == TB:
-            text, n = re.subn(r'(parameter\s+RUN_CASE\s*=\s*)1', r'\g<1>0', text)   # vector regression mode
-            if n != 1:
+            text, cnt = re.subn(r'(parameter\s+RUN_CASE\s*=\s*)1', r'\g<1>0', text)   # vector regression mode
+            if cnt != 1:
                 print("ERROR: could not patch parameter RUN_CASE in the testbench copy.")
                 return False
             for name, val in (("NUM_CHANNELS", n), ("DATA_WIDTH", w)):
@@ -175,12 +175,12 @@ def simulate_xsim(vectors, paths, n=4, w=8):
                     print(f"ERROR: could not patch parameter {name} in the testbench copy.")
                     return False
             for name, val in param_paths.items():
-                text, n = re.subn(
+                text, cnt = re.subn(
                     r'(parameter\s+' + name + r'\s*=\s*)"[^"]*"',
                     lambda m, v=Path(val).as_posix(): m.group(1) + '"' + v + '"',
                     text,
                 )
-                if n != 1:
+                if cnt != 1:
                     print(f"ERROR: could not patch parameter {name} in the testbench copy.")
                     return False
         if "`timescale" not in text:
