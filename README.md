@@ -10,7 +10,7 @@ implementation results.
 | System testbench | **38 / 38** checks pass (Icarus Verilog and Vivado XSIM), see [Section 8](#8-verification) |
 | Golden model | **200 / 200** random vectors match bit-for-bit (stream, outputs, latency) for 4 × 8, plus other sizes; **46 / 46** message cases (4 × 8, 4 × 16, 8 × 8, 3 × 12) give identical RTL and golden result files, see [Section 8.3](#83-python-golden-model-rtl-vs-reference) and [8.5](#85-message-mode-regression) |
 | Latency | 33 clocks from reset to first valid frame, 40 clocks (max 41) after a mid-stream data change (4 × 8); in general cold start `N·W + 1`, worst case `N·W + W + 1` |
-| Implementation | Vivado 2020.2 (post-implementation), Kintex-7 `xc7k70tfbv676-1`, default 4 × 8: **22 LUTs, 63 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.574 ns, WHS +0.159 ns), see [Section 9](#9-implementation-results) |
+| Implementation | Vivado 2020.2, Kintex-7 `xc7k70tfbv676-1`, default 4 × 8, after place and route: **22 LUTs, 64 FFs**, no BRAM/DSP; timing met at 100 MHz (WNS +6.921 ns, WHS +0.059 ns), see [Section 9](#9-implementation-results) |
 
 ---
 
@@ -132,10 +132,10 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 │   ├── compare_output.py, export_excel.py, ...
 │   └── verification_logs/       #   latest result files, report and Excel workbook
 ├── input/                       # input_vectors.txt (the one case), test_cases.txt (all cases), input_vectors.hex / random_vectors.hex (regression)
-├── results/                     # Vivado reports, screenshots, rtl_result.txt and golden_result.txt of the last case
+├── results/                     # Vivado synthesis / post-route reports, screenshots, rtl_result.txt and golden_result.txt of the last case
 ├── scripts/
 │   ├── run_tests.py             #   runs every self-checking testbench
-│   └── synth.tcl                #   Vivado batch synthesis + utilization/timing reports
+│   └── synth.tcl                #   Vivado batch synthesis + implementation, utilization/timing reports
 ├── constraint/constraints.xdc   # clock constraint (pin assignments pending a target board)
 ├── image/                       # block diagrams
 ├── docs/                        # SIMULATION.md, golden_vs_rtl.md (line-by-line mapping) and design notes
@@ -258,7 +258,7 @@ CH1, … in turn, then back to CH0), and a channel whose message is finished sen
 channel back together. All prepared cases are in `input/test_cases.txt`.
 
 ```
-// input/input_vectors.txt
+// example: CASE 2 of input/test_cases.txt (copied into input/input_vectors.txt)
 NUM_CHANNELS = 4
 DATA_WIDTH   = 8              // bits per slot
 CH0 = 0123456789abcdef        // 8 slots: 01 23 45 67 89 ab cd ef
@@ -296,46 +296,46 @@ look-ahead removed on purpose every case fails at the first wrong bit on `TDM_DA
 
 ## 9. Implementation Results
 
-Utilization report exported from Vivado 2020.2 after implementation (place and route), target device Kintex-7 `xc7k70tfbv676-1`.
-The batch script `scripts/synth.tcl` runs the synthesis step only, so it does not reproduce the post-implementation numbers below:
+Vivado 2020.2, target device Kintex-7 `xc7k70tfbv676-1`, default 4 × 8, 10 ns (100 MHz) clock from `constraint/constraints.xdc`.
+`vivado -mode batch -source scripts/synth.tcl` produces all three reports in `results/`:
+[`tdm_top_utilization_synth.rpt`](results/tdm_top_utilization_synth.rpt) (after synthesis),
+[`tdm_top_utilization_impl.rpt`](results/tdm_top_utilization_impl.rpt) and
+[`tdm_top_timing_impl.rpt`](results/tdm_top_timing_impl.rpt) (after place and route).
 
-| Resource | Used | Available | Utilization |
-|---|---|---|---|
-| Slice LUTs | 22 | 41,000 | 0.05% |
-| Slice Registers (Flip-Flop) | 63 | 82,000 | 0.08% |
-| Bonded IOB | 67 | 300 | 22.33% |
-| Block RAM | 0 | 135 | 0% |
-| DSP | 0 | 240 | 0% |
-| BUFGCTRL (clock buffer) | 1 | 32 | 3.13% |
+| Resource | After synthesis | After place and route | Available | Utilization (routed) |
+|---|---|---|---|---|
+| Slice LUTs | 22 | 22 | 41,000 | 0.05% |
+| Slice Registers (flip-flops) | 63 | 64 | 82,000 | 0.08% |
+| Slices | – | 19 | 10,250 | 0.19% |
+| Bonded IOB | 67 | 67 | 300 | 22.33% |
+| Block RAM | 0 | 0 | 135 | 0% |
+| DSP | 0 | 0 | 240 | 0% |
+| BUFGCTRL (clock buffer) | 1 | 1 | 32 | 3.13% |
 
-Primitive breakdown: 63 `FDRE` (all-synchronous design, no latches), 15 `LUT6` + 6 `LUT3` + 3 `LUT5` + 2 `LUT4` + 1 `LUT2` +
-1 `LUT1`, 34 `IBUF` / 33 `OBUF`, and 1 `BUFG`. Bonded I/O is the dominant usage, which is expected with 4 × 8-bit inputs and
-4 × 8-bit outputs plus clock, reset and the serial pin; no BRAM or DSP is needed.
+Primitives after place and route: 64 `FDRE` (all with synchronous reset, no latches), 15 `LUT6` + 6 `LUT3` + 2 `LUT5` + 2 `LUT2` +
+2 `LUT1` + 1 `LUT4` (28 LUT primitives in 22 LUT sites; 6 sites use both outputs O5 and O6), 34 `IBUF` / 33 `OBUF` and 1 `BUFG`.
+Bonded I/O is the dominant usage, as expected with 4 × 8-bit inputs and 4 × 8-bit outputs plus clock, reset and the serial pin.
 
-The RTL declares 64 register bits (5 + 8 + 8 + 8 + 1 + 2 + 32), but Vivado reports 63 `FDRE`. `rx_shift[7]` is written but never read
-(only `rx_shift[6:0]` is used when the byte is latched), so the tool removes it. The post-implementation netlist confirms it:
-`get_cells -hierarchical -filter {NAME =~ *rx_shift_reg*}` lists only `u_rx/rx_shift_reg[0]` to `[6]`.
+The RTL declares 64 register bits (5 + 8 + 8 + 8 + 1 + 2 + 32). Synthesis keeps 63: `rx_shift[7]` is written but never read (only
+`rx_shift[6:0]` is used when the word is latched), so it is removed. After implementation the count is back to 64 because
+`opt_design` adds one copy of a register, `u_tx/tx_shift_reg[7]_lopt_replica`, which appears as the endpoint of the worst setup path.
 
-### Timing (Vivado *Design Timing Summary*, post-implementation, 10 ns / 100 MHz clock constraint)
+### Timing (post-route, `results/tdm_top_timing_impl.rpt`)
 
-| Check | Worst slack | Failing endpoints | Endpoints |
-|---|---|---|---|
-| Setup (WNS) | **+6.574 ns** | 0 | 104 |
-| Hold (WHS) | **+0.159 ns** | 0 | 104 |
-| Pulse width (WPWS) | **+4.600 ns** | 0 | 65 |
+| Check | Worst slack | Total violation | Failing endpoints | Endpoints |
+|---|---|---|---|---|
+| Setup (WNS) | **+6.921 ns** | 0.000 ns | 0 | 106 |
+| Hold (WHS) | **+0.059 ns** | 0.000 ns | 0 | 106 |
+| Pulse width (WPWS) | **+4.600 ns** | 0.000 ns | 0 | 65 |
 
-![Vivado Design Timing Summary](image/timing_summary.png)
+Vivado reports: *All user specified timing constraints are met.* The worst setup path runs from `u_counter/bit_index_reg[0]` through
+three LUTs (look-ahead `mux_select`, then the `tdm_mux` select) to the `tx_shift_reg[7]` replica: 3.104 ns of data delay (0.559 ns logic,
+2.545 ns routing). The worst hold path is the `rx_shift_reg[5]` → `rx_shift_reg[6]` shift, with a 0.059 ns margin.
 
-Vivado reports: *All user specified timing constraints are met.* TNS, THS and TPWS are all 0.000 ns.
-
-> These figures were measured on the RTL before it was parameterized. The default 4 × 8 configuration of the
-> parameterized RTL is cycle-for-cycle identical in simulation (20 000-cycle lock-step comparison with the old RTL),
-> but its utilization and timing must be re-run in Vivado before the numbers above are quoted for it.
-
-A rough estimate from the setup slack is a minimum clock period of about 10 − 6.574 = 3.43 ns, i.e. roughly 290 MHz.
-This is an estimate derived from one run, not a guaranteed maximum frequency. The 100 MHz clock in `constraints.xdc` is a
-placeholder, not a requirement from the specification, and the I/O delays are not constrained, so input and output paths
-are not part of this result. Keep the `.rpt` file of the run in `results/` as evidence.
+A rough estimate from the setup slack is a minimum clock period of about 10 − 6.921 = 3.08 ns, i.e. roughly 320 MHz. This is an
+estimate from one run, not a guaranteed maximum frequency. The 100 MHz clock is a placeholder, not a requirement from the
+specification. `check_timing` lists 33 inputs without input delay and 33 outputs without output delay, so the I/O paths are not part
+of this result (no board and no pin assignment yet).
 
 ---
 
@@ -352,7 +352,7 @@ are not part of this result. Keep the `.rpt` file of the run in `results/` as ev
 
 ## 11. Future Work
 
-- Add the Vivado timing report file (`.rpt`) to `results/` and constrain the I/O delays so that input and output paths are analysed too.
+- Constrain the I/O delays (`set_input_delay` / `set_output_delay`) once a board is chosen, so that input and output paths are analysed too.
 - Choose a target board, set the real clock frequency and pin assignments in `constraint/constraints.xdc`.
 - Add the input buffer registers described in [Section 10](#10-limitations) and extend the golden model to check them.
 - Cover the remaining edge cases (short reset, back-to-back resets) in the testbenches.
