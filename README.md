@@ -45,8 +45,7 @@ with Vivado.
 ```bash
 python scripts/run_tests.py                      # system testbench -> 38/38 PASS
 python golden_model/run_verification.py          # RTL vs Python golden model -> ALL CHECKS PASSED
-python scripts/run_single_case.py                # messages of input/message_case.txt: two result files to compare
-python scripts/run_single_case.py --case input/message_case_4x16.txt  # same, 2 bytes per slot
+python golden_model/golden_model.py              # golden model of input/input_vectors.txt -> results/golden_result.txt
 ```
 
 Add `--sim xsim` to either command to use Vivado XSIM instead of Icarus. The full guide, including
@@ -122,20 +121,17 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 │   └── tdm_top.v                #   top level + timing glue layer
 ├── techbench/                   # testbenches
 │   ├── tb_tdm_top.v             #   full-system test (3 layers of checks)
-│   ├── tb_tdm_top_filebased.v   #   file-driven testbench (any NUM_CHANNELS x DATA_WIDTH; +TRACE writes a one-case trace)
+│   ├── tb_tdm_top_filebased.v   #   one case from input/input_vectors.txt (default), or the vector regression
 │   └── testbench.md             #   walkthrough of tb_tdm_top.v
 ├── golden_model/                # Python reference model + automatic RTL comparison (see its README)
 │   ├── run_verification.py      #   simulate + compare in one command
-│   ├── golden_model.py          #   parameterized reference model (num_channels, data_width)
-│   ├── single_case.py           #   golden trace for one case file, same format as the testbench trace
+│   ├── golden_model.py          #   reference model; run it to get results/golden_result.txt for input/input_vectors.txt
 │   ├── compare_output.py, export_excel.py, ...
 │   └── verification_logs/       #   latest result files, report and Excel workbook
-├── input/                       # input vectors (input_vectors.hex, random_vectors.hex) and case files (message_case*.txt, single_case*.txt)
-├── results/                     # Vivado reports, screenshots, single_case/<case>/ result files
+├── input/                       # input_vectors.txt (the one case), test_cases.txt (all cases), input_vectors.hex / random_vectors.hex (regression)
+├── results/                     # Vivado reports, screenshots, rtl_result.txt and golden_result.txt of the last case
 ├── scripts/
 │   ├── run_tests.py             #   runs every self-checking testbench
-│   ├── run_single_case.py       #   one case through RTL (Icarus or XSIM) and golden model, two files to compare by eye
-│   ├── vivado_single_case.tcl   #   the same from the Vivado GUI Tcl console
 │   └── synth.tcl                #   Vivado batch synthesis + utilization/timing reports
 ├── constraint/constraints.xdc   # clock constraint (pin assignments pending a target board)
 ├── image/                       # block diagrams
@@ -250,38 +246,37 @@ Each run also appends to `golden_model/verification_logs/verification_results.xl
 A mid-stream latency below 40 appears when a channel's byte equals the previous vector's byte, so that channel needs no update.
 This automatic flow checks the default 4 × 8 configuration.
 
-### 8.4 One case, compared by eye (`python scripts/run_single_case.py`)
+### 8.4 One case, compared by eye
 
-One case is written in a small text file: the size, then the whole message of every device (hex). Each message is
-cut into `DATA_WIDTH`-bit slots; frame f carries slot f of every channel (CH0, CH1, … in turn, then back to CH0), and a
-channel whose message is finished sends 0. The receiver puts the slots of each channel back together.
+The testbench and the golden model read **one** input file, `input/input_vectors.txt`: the size, then the whole message
+of every device (hex). Each message is cut into `DATA_WIDTH`-bit slots; frame f carries slot f of every channel (CH0,
+CH1, … in turn, then back to CH0), and a channel whose message is finished sends 0. The receiver puts the slots of each
+channel back together. All prepared cases are in `input/test_cases.txt`.
 
 ```
-// input/message_case.txt
+// input/input_vectors.txt
 NUM_CHANNELS = 4
-DATA_WIDTH   = 8
-CH0 = 0123456789abcdef      // 8 slots: 01 23 45 67 89 ab cd ef
-CH1 = deadbeef              // 4 slots, then 0
+DATA_WIDTH   = 8              // bits per slot
+CH0 = 0123456789abcdef        // 8 slots: 01 23 45 67 89 ab cd ef
+CH1 = deadbeef                // 4 slots, then 00
 CH2 = cafe
 CH3 = 5a
 ```
 
-The existing file-driven testbench `techbench/tb_tdm_top_filebased.v` (with `CASE_FILE` / `+CASE=<file>`) and
-`golden_model/single_case.py` read **the same case file** and each write a plain-text result file in **the same
-format**: the messages and their slots, a cycle-by-cycle trace (time in ns, frame, channel and bit number on
-`TDM_DATA`, all outputs), every received slot with the cycle in which it reached its output, and the rebuilt messages. Nothing is compared automatically; open the two files side by side
-(VS Code *Compare Selected*, WinMerge, Notepad++ Compare). Only the `# source` line differs when RTL and model agree.
+1. Put the case in `input/input_vectors.txt` (copy one from `input/test_cases.txt`).
+2. In `techbench/tb_tdm_top_filebased.v` set `NUM_CHANNELS`, `DATA_WIDTH` to the values of the file and, once,
+   `REPO_DIR` to the repository folder (Vivado: absolute path with forward slashes). The testbench stops with an error
+   if the size does not match the file.
+3. Run the simulation to the end (Vivado: Run Simulation, then **Run All**; Icarus:
+   `iverilog -g2001 -o sim/tb techbench/tb_tdm_top_filebased.v src/*.v && vvp sim/tb` from the repository folder).
+   → `results/rtl_result.txt`
+4. `python golden_model/golden_model.py` → prints every step and writes `results/golden_result.txt`.
+5. Open the two files side by side (VS Code: `code --diff results/rtl_result.txt results/golden_result.txt`).
+   Only the `# source` line differs when RTL and model agree. Both files are overwritten by the next run.
 
-```bash
-python scripts/run_single_case.py                                    # input/message_case.txt (4 x 8), Icarus
-python scripts/run_single_case.py --case input/message_case_4x16.txt # 2 bytes per slot
-python scripts/run_single_case.py --sim xsim                        # Vivado XSIM from the command line
-```
-
-In the Vivado GUI: `source scripts/vivado_single_case.tcl` in the Tcl console (optionally `set case_file ...` first);
-it sets the parameters from the case file, runs the simulation with its waveform and writes the golden file too.
-Results go to `results/single_case/<case file name>/`. Which golden-model line corresponds to which RTL line is listed in
-[docs/golden_vs_rtl.md](docs/golden_vs_rtl.md).
+Each result file holds the messages and their slots, a cycle-by-cycle trace (time in ns, frame, channel and bit number
+on `TDM_DATA`, all outputs), every received slot with the cycle in which it reached its output, and the rebuilt
+messages. Which golden-model line corresponds to which RTL line is listed in [docs/golden_vs_rtl.md](docs/golden_vs_rtl.md).
 
 ---
 

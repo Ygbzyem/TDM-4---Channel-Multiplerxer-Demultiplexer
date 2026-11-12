@@ -1,9 +1,0 @@
-// TDM message case: every device has a whole message (hex).
-// Each frame sends one DATA_WIDTH-bit slot of every channel, CH0 first.
-// Messages may have different lengths; a finished channel sends 0.
-NUM_CHANNELS = 4
-DATA_WIDTH   = 8
-CH0 = 0123456789abcdef
-CH1 = deadbeef
-CH2 = cafe
-CH3 = 5a

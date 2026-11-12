@@ -113,42 +113,32 @@ For the file-driven testbench `techbench/tb_tdm_top_filebased.v` (golden model f
 
 ### One case from a text file, with waveform
 
-Write the case in a text file (or edit `input/message_case.txt`): the size first, then the whole message of every
-device, hex without `0x`. Messages are cut into `DATA_WIDTH`-bit slots; frame f carries slot f of every channel and a
-finished channel sends 0.
-
 ```
-// input/message_case.txt
+// input/input_vectors.txt
 NUM_CHANNELS = 4
-DATA_WIDTH   = 8
-CH0 = 0123456789abcdef
-CH1 = deadbeef
+DATA_WIDTH   = 8              // bits per slot
+CH0 = 0123456789abcdef        // 8 slots: 01 23 45 67 89 ab cd ef
+CH1 = deadbeef                // 4 slots, then 00
 CH2 = cafe
 CH3 = 5a
 ```
 
-**Vivado GUI, one command.** With `src/*.v` as design sources and `techbench/tb_tdm_top_filebased.v` as a simulation
-source, type in the Tcl console (use your own repository path, forward slashes, no accents):
+1. Put the case in `input/input_vectors.txt` (copy one from `input/test_cases.txt`).
+2. In `techbench/tb_tdm_top_filebased.v` set `NUM_CHANNELS`, `DATA_WIDTH` to the values of the file and, once,
+   `REPO_DIR` to the repository folder (Vivado: absolute path with forward slashes). The testbench stops with an error
+   if the size does not match the file.
+3. Run the simulation to the end (Vivado: Run Simulation, then **Run All**; Icarus:
+   `iverilog -g2001 -o sim/tb techbench/tb_tdm_top_filebased.v src/*.v && vvp sim/tb` from the repository folder).
+   → `results/rtl_result.txt`
+4. `python golden_model/golden_model.py` → prints every step and writes `results/golden_result.txt`.
+5. Open the two files side by side (VS Code: `code --diff results/rtl_result.txt results/golden_result.txt`).
+   Only the `# source` line differs when RTL and model agree. Both files are overwritten by the next run.
 
-```tcl
-set case_file C:/path/to/repo/input/message_case_4x16.txt    ;# optional, default input/message_case.txt
-source C:/path/to/repo/scripts/vivado_single_case.tcl
-```
+In Vivado add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`, `TDM_DATA`, `DUT/load`, `DUT/word_done`,
+`DUT/demux_select` and `ch_out` (radix hexadecimal) to the waveform, then `restart` and `run all`. If the waveform
+shows only X, it is zoomed on the first picoseconds: use **Zoom Fit**.
 
-The script reads `NUM_CHANNELS` and `DATA_WIDTH` from the file, sets them as simulation parameters, sets the file
-paths, launches the simulation and runs it to `$finish`, then runs the golden model if Python is on the PATH. Both
-files are written to `results/single_case/<case file name>/`. Add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`,
-`TDM_DATA`, `DUT/load`, `DUT/word_done`, `DUT/demux_select` and `ch_out` (radix hexadecimal) to the waveform, then
-`restart` and `run all`.
-
-**Without the script.** Set `NUM_CHANNELS`, `DATA_WIDTH`, `CASE_FILE` and `TRACE_FILE` at the top of the testbench (the
-size must equal the one in the case file, otherwise the testbench stops with an error), run to `$finish`, then:
-
-```bash
-python golden_model/single_case.py --case C:/path/to/case.txt --out C:/path/to/golden_result.txt
-```
-
-**Icarus Verilog:** `python scripts/run_single_case.py --case input/message_case_4x16.txt` does both steps.
+The vector regression of section 3 uses the same testbench with `RUN_CASE = 0`; `run_verification.py` sets it.
 
 ## 5. Synthesis (optional, Vivado)
 

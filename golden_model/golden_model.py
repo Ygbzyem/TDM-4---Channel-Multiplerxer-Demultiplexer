@@ -133,14 +133,135 @@ class TDMGoldenModel:
             })
         return rows
 
-if __name__ == "__main__":
-    gm = TDMGoldenModel()
-    result = gm.run_frame(0x12, 0x34, 0x56, 0x78)
-    print("TDM Stream:", "".join(map(str, result["stream"])))
-    print("Recovered :", [hex(v) for v in result["outputs"]])
-    print("PASS" if result["outputs"] == [0x12, 0x34, 0x56, 0x78] else "FAIL")
 
-    gm16 = TDMGoldenModel(num_channels=4, data_width=16)
-    r16 = gm16.run_frame(0x1234, 0xABCD, 0x00FF, 0x8001)
-    print("4 x 16    :", [hex(v) for v in r16["outputs"]],
-          "latency", gm16.cold_start_latency(), "cycles")
+# ====================================================================== one case from a file
+# The same input file as the RTL testbench (techbench/tb_tdm_top_filebased.v):
+#     input/input_vectors.txt   ->   results/golden_result.txt
+# Run:  python golden_model/golden_model.py           (options: --case FILE --out FILE)
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_CASE = ROOT / "input" / "input_vectors.txt"
+DEFAULT_OUT = ROOT / "results" / "golden_result.txt"
+
+
+def read_case(path):
+    """Return (num_channels, data_width, [message of CH0, CH1, ...]); messages are hex strings."""
+    n = w = None
+    chans = {}
+    for no, raw in enumerate(Path(path).read_text().splitlines(), 1):
+        line = raw.split("//")[0].strip()
+        if not line:
+            continue
+        m = re.fullmatch(r"(NUM_CHANNELS|DATA_WIDTH|CH(\d+))\s*=\s*(\S+)", line)
+        if not m:
+            sys.exit(f"ERROR: {path}:{no}: cannot read '{raw.strip()}'")
+        key, idx, val = m.group(1), m.group(2), m.group(3)
+        if key == "NUM_CHANNELS":
+            n = int(val)
+        elif key == "DATA_WIDTH":
+            w = int(val)
+        else:
+            if not re.fullmatch(r"[0-9a-fA-F]+", val):
+                sys.exit(f"ERROR: {path}:{no}: message must be hex digits only (no 0x)")
+            chans[int(idx)] = val.lower()
+    if n is None or w is None:
+        sys.exit(f"ERROR: {path} must set NUM_CHANNELS and DATA_WIDTH")
+    for i in range(n):
+        if i not in chans:
+            sys.exit(f"ERROR: {path}: line CH{i} = ... is missing")
+    extra = [i for i in chans if i >= n]
+    if extra:
+        sys.exit(f"ERROR: {path}: CH{extra[0]} does not exist (NUM_CHANNELS = {n})")
+    return n, w, [chans[i] for i in range(n)]
+
+
+def write_result(gm, messages, out_path, clk_period=10, verbose=True):
+    """Write the expected result in the same format as the RTL testbench trace."""
+    n, w, fc = gm.num_channels, gm.data_width, gm.frame_cycles
+    hx = lambda v: format(v, f"0{(w + 3) // 4}x")
+    say = print if verbose else (lambda *a, **k: None)
+
+    slots = [gm.message_slots(m) for m in messages]           # step 1: cut messages into slots
+    say(f"Step 1 - cut every message into {w}-bit slots:")
+    for c in range(n):
+        say(f"  CH{c} = {messages[c]:<20} -> " + " ".join(hx(v) for v in slots[c]))
+
+    frames = gm.frames(slots)                                 # step 2: frame f = slot f of every channel
+    say(f"Step 2 - {len(frames)} frame(s) of {fc} cycles, CH0 first, a finished channel sends 0:")
+    for f, words in enumerate(frames):
+        bits = "".join(map(str, gm.serialize(words)))         # what goes on TDM_DATA in this frame
+        say(f"  frame {f}: " + " ".join(f"CH{c}={hx(v)}" for c, v in enumerate(words))
+            + "   TDM_DATA = " + " ".join(bits[k * w:(k + 1) * w] for k in range(n)))
+
+    last = len(frames) * fc + 1                               # last word reaches its output
+    lines = [
+        "# TDM case result",
+        "# source       : golden model (Python)",
+        f"# NUM_CHANNELS : {n}",
+        f"# DATA_WIDTH   : {w} bits per slot",
+        f"# frame length : {fc} cycles (one slot of every channel)",
+        f"# frames       : {len(frames)}",
+        f"# clock period : {clk_period} ns",
+        "# cycle 0      : first clock cycle after reset is released",
+        "#",
+        "# [1] messages and their slots (a finished channel sends 0)",
+    ]
+    lines += [f"CH{c} = {messages[c]}  slots:" + "".join(f" {hx(v)}" for v in slots[c]) for c in range(n)]
+    lines += [
+        "#",
+        "# [2] cycle-by-cycle trace: ch / bit = channel and bit number on TDM_DATA (MSB first)",
+        "# cycle  time_ns  frame  ch  bit  TDM_DATA  | outputs during this cycle",
+    ]
+    for r in gm.timeline_frames(frames, cycles=last + 1):     # step 3: cycle by cycle
+        outs = "".join(f" CH{c}={hx(v)}" for c, v in enumerate(r["outputs"]))
+        lines.append(f"{r['cycle']:7d} {r['cycle'] * clk_period:8d} {r['frame']:6d} {r['ch']:3d} "
+                     f"{r['bit']:4d} {r['tdm_data']:9d}  |{outs}")
+    lines += ["#", "# [3] received slots per channel: value(cycle in which the output took it), rebuilt message"]
+    for c in range(n):
+        lines.append(f"CH{c}_OUT :" + "".join(f" {hx(frames[f][c])}({gm.valid_cycle(c, f)})"
+                                              for f in range(len(frames))))
+    say("Step 3 - receive: every slot reaches its output 2 cycles after its last bit, then rebuild:")
+    for c in range(n):
+        received = [frames[f][c] for f in range(len(frames))]
+        msg = gm.rebuild_message(received, len(messages[c]))  # step 4: put the slots back together
+        lines.append(f"CH{c} message = {msg}")
+        say(f"  CH{c} message = {msg}   (slots at cycles "
+            + ", ".join(str(gm.valid_cycle(c, f)) for f in range(len(frames))) + ")")
+    lines.append(f"# last output update: cycle {last} ({last * clk_period} ns)")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text("\n".join(lines) + "\n")
+
+
+def _show(p):
+    """Path relative to the repository when it is inside it."""
+    p = Path(p).resolve()
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(p)
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Golden model of the TDM mux/demux for one case file.")
+    ap.add_argument("--case", default=str(DEFAULT_CASE), help="input file (default input/input_vectors.txt)")
+    ap.add_argument("--out", default=str(DEFAULT_OUT), help="result file (default results/golden_result.txt)")
+    ap.add_argument("--clk-period", type=int, default=10, help="clock period in ns (default 10)")
+    a = ap.parse_args(argv)
+
+    n, w, messages = read_case(a.case)
+    gm = TDMGoldenModel(n, w)
+    print("Golden model (Python) of the TDM multiplexer/demultiplexer")
+    print(f"  input  : {_show(a.case)}")
+    print(f"  size   : NUM_CHANNELS = {n}, DATA_WIDTH = {w} bits per slot, frame = {gm.frame_cycles} cycles")
+    write_result(gm, messages, a.out, a.clk_period)
+    print(f"  output : {_show(a.out)}")
+    print("Compare it with results/rtl_result.txt from the RTL simulation (only the '# source' line differs).")
+
+
+if __name__ == "__main__":
+    main()

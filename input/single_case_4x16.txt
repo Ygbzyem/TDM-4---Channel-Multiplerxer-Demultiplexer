@@ -1,7 +1,0 @@
-// TDM single case: 4 channels x 16 bits (2 bytes per channel).
-NUM_CHANNELS = 4
-DATA_WIDTH   = 16
-CH0 = 1234
-CH1 = abcd
-CH2 = 00ff
-CH3 = 8001

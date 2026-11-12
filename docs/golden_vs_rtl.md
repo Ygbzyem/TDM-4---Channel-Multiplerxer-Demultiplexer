@@ -30,9 +30,9 @@ devices that present the next slot every frame and collects what comes out. The 
 
 | Golden model (`golden_model.py`) | Testbench (`techbench/tb_tdm_top_filebased.v`) | What both do |
 |---|---|---|
-| L83–90 `message_slots()` | L261 `read_message_case`, L310 `word[W-1-b] = ... msg_bit(c, k) : 0` | Cut the hex message into W-bit slots, MSB first, last slot padded with 0 |
-| L92–95 `frames()`: `sl[f] if f < len(sl) else 0` | L320–326 `apply_frame`: `(f < n_slots[c]) ? slot_mem[...] : 0`; L398 next slot in the last cycle of a frame | Frame f carries slot f of every channel; a finished channel sends 0 |
-| L97–102 `rebuild_message()` | L381 collect the word from `ch_out`; L415 rebuild the message | Put the received slots of a channel back together |
+| L83–90 `message_slots()` | L281 `read_message_case`, L330 `word[W-1-b] = ... msg_bit(c, k) : 0` | Cut the hex message into W-bit slots, MSB first, last slot padded with 0 |
+| L92–95 `frames()`: `sl[f] if f < len(sl) else 0` | L340–346 `apply_frame`: `(f < n_slots[c]) ? slot_mem[...] : 0`; L417 next slot in the last cycle of a frame | Frame f carries slot f of every channel; a finished channel sends 0 |
+| L97–102 `rebuild_message()` | L400 collect the word from `ch_out`; L434 rebuild the message | Put the received slots of a channel back together |
 
 ## 2. Only in the RTL, and why
 
@@ -48,5 +48,5 @@ the RTL on the schedule that the golden model describes:
 | `tx_shift_reg.v` L20 reset preloads `mux_out` | CH0 must be the first word on the wire after reset | the trace must start with CH0, bit W−1, in cycle 0 |
 
 Without these lines the RTL still moves every bit, but the channels rotate (`AA BB CC DD` → `DD AA BB CC`). The
-one-case comparison (`scripts/run_single_case.py` or `scripts/vivado_single_case.tcl`) shows this immediately as
+one-case comparison (README section 8.4) shows this immediately as
 differing lines between `rtl_result.txt` and `golden_result.txt`.

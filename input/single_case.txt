@@ -1,8 +1,0 @@
-// TDM single case: set the size, then write one line per channel.
-// Values are hex without 0x, at most DATA_WIDTH bits each.
-NUM_CHANNELS = 4
-DATA_WIDTH   = 8
-CH0 = a5
-CH1 = 3c
-CH2 = f0
-CH3 = 5a

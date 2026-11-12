@@ -110,7 +110,7 @@ def simulate_iverilog(vectors, paths):
 
     print("[1/2] compiling RTL + testbench (iverilog) ...")
     r = subprocess.run(
-        [iverilog, "-g2012", "-o", str(SIM), str(TB), *sources],
+        [iverilog, "-g2012", f"-P{TB_TOP}.RUN_CASE=0", "-o", str(SIM), str(TB), *sources],
         cwd=ROOT, capture_output=True, text=True,
     )
     if r.returncode != 0:
@@ -162,6 +162,10 @@ def simulate_xsim(vectors, paths):
     for f in files:
         text = f.read_text(encoding="utf-8", errors="replace")
         if f == TB:
+            text, n = re.subn(r'(parameter\s+RUN_CASE\s*=\s*)1', r'\g<1>0', text)   # vector regression mode
+            if n != 1:
+                print("ERROR: could not patch parameter RUN_CASE in the testbench copy.")
+                return False
             for name, val in param_paths.items():
                 text, n = re.subn(
                     r'(parameter\s+' + name + r'\s*=\s*)"[^"]*"',

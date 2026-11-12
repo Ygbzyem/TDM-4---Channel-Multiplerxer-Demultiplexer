@@ -1,4 +1,4 @@
-# TDM single-case result
+# TDM case result
 # source       : golden model (Python)
 # NUM_CHANNELS : 4
 # DATA_WIDTH   : 8 bits per slot

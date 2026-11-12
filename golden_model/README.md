@@ -1,10 +1,10 @@
 # Golden model — how to run it
 
 > **Parameterized model.** `TDMGoldenModel(num_channels=4, data_width=8)` follows the parameters of the RTL.
-> `single_case.py` writes the expected result of one case file (`input/message_case.txt`: `NUM_CHANNELS`, `DATA_WIDTH`,
-> one `CHi = message` line per device; messages are cut into `DATA_WIDTH`-bit slots, frame f carries slot f of every
-> channel, a finished channel sends 0) in the same text format as the trace of `techbench/tb_tdm_top_filebased.v`, for
-> a side-by-side comparison by eye: `python golden_model/single_case.py --case input/message_case_4x16.txt --out golden_result.txt`.
+> **One case:** `python golden_model/golden_model.py` reads `input/input_vectors.txt` (the same file as the RTL
+> testbench: `NUM_CHANNELS`, `DATA_WIDTH`, one `CHi = message` line per device), prints every step (slots, frames,
+> bits on `TDM_DATA`, rebuilt messages) and writes `results/golden_result.txt` in the same format as the RTL result
+> `results/rtl_result.txt`. Options: `--case FILE`, `--out FILE`.
 > Each step of `golden_model.py` names the RTL line that does the same job; see [../docs/golden_vs_rtl.md](../docs/golden_vs_rtl.md).
 > The automatic Python comparison described below (`run_verification.py`) still assumes the default 4 × 8.
 

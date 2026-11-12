@@ -1,6 +1,22 @@
 // =============================================================
 // tb_tdm_top_filebased.v
 //
+// QUICK START (one case, Vivado or Icarus)
+//   1. Set REPO_DIR below to the repository folder once
+//      (Vivado: absolute path with forward slashes, e.g.
+//       "C:/GitHub/TDM-4---Channel-Multiplerxer-Demultiplexer-").
+//   2. Put the case in input/input_vectors.txt (copy one from
+//      input/test_cases.txt) and set NUM_CHANNELS / DATA_WIDTH below to
+//      the same values as in that file.
+//   3. Run the simulation to the end (Vivado: Run All).
+//      -> results/rtl_result.txt  (overwritten on every run)
+//   4. python golden_model/golden_model.py
+//      -> results/golden_result.txt (same format), then compare the two files.
+//
+// The rest of this header describes the second mode (RUN_CASE = 0): the
+// automatic regression over a list of packed vectors used by
+// golden_model/run_verification.py.
+//
 // File-driven testbench for tdm_top. Instead of hardcoding
 // CH0..CH3 values in the testbench body (as tb_tdm_top.v does),
 // this testbench reads a list of test vectors from a .hex file,
@@ -65,8 +81,8 @@
 // vector {CH0, CH1, ...}, e.g. 4 x 16: "1234abcd00ff8001". Set them at the
 // top of this file, with iverilog -P, or with Vivado -generic_top.
 //
-// ONE CASE FROM A TEXT FILE (CASE_FILE parameter or +CASE=<file>):
-// instead of the vector list, read one case written as
+// ONE CASE (RUN_CASE = 1, the default): read REPO_DIR/input/input_vectors.txt
+// (or +CASE=<file>), written as
 //     NUM_CHANNELS = 4
 //     DATA_WIDTH   = 8                  (bits per time slot)
 //     CH0 = 0123456789abcdef            (the whole message of device 0, hex)
@@ -75,11 +91,10 @@
 // devices: frame f carries slot f of every channel (CH0, CH1, ... in turn,
 // then back to CH0 for the next slot), a channel whose message is finished
 // sends 0, and the received slots are put back together per channel.
-// The cycle-by-cycle trace and the received messages go to TRACE_FILE
-// (parameter or +TRACE=<file>, default rtl_result.txt).
-// golden_model/single_case.py writes the expected trace of the same case
-// file in exactly the same format, so the two files can be compared by eye.
-// +VCD=<file> dumps the waveform.
+// The cycle-by-cycle trace and the received messages go to
+// REPO_DIR/results/rtl_result.txt (or +TRACE=<file>). golden_model/golden_model.py
+// writes the expected result of the same input file in exactly the same
+// format to results/golden_result.txt. +VCD=<file> dumps the waveform.
 //
 // SETTLE_CYCLES is deliberately a multiple of the frame length (32
 // clocks for 4 x 8): this makes the sampling point land on the same
@@ -110,8 +125,14 @@
 
 module tb_tdm_top_filebased;
 
+    // ---- set these to match input/input_vectors.txt, and REPO_DIR once ----
     parameter NUM_CHANNELS   = 4;
     parameter DATA_WIDTH     = 8;
+    parameter REPO_DIR       = ".";    // Vivado: absolute repository path, forward slashes
+    parameter RUN_CASE       = 1;      // 1 = one case from input/input_vectors.txt, 0 = vector regression
+
+    localparam CASE_FILE  = {REPO_DIR, "/input/input_vectors.txt"};
+    localparam TRACE_FILE = {REPO_DIR, "/results/rtl_result.txt"};
     parameter MAX_VECTORS    = 256;
     parameter SETTLE_CYCLES  = 2 * NUM_CHANNELS * DATA_WIDTH;     // 2 frames (64 for 4 x 8)
     parameter SYNC_BIT_COUNT = (NUM_CHANNELS - 1) * DATA_WIDTH;   // start of the last channel slot (24)
@@ -128,8 +149,7 @@ module tb_tdm_top_filebased;
     "golden_model/verification_logs/rtl_stream_vectors.txt";
     parameter LATENCY_FILE =
     "golden_model/verification_logs/rtl_latency_vectors.txt";
-    parameter TRACE_FILE   = "none";   // set a path (or +TRACE=<file>) to write the one-case trace
-    parameter CASE_FILE    = "none";   // set a path (or +CASE=<file>) to run ONE case from a text file
+
 
     // Effective paths (parameters above, optionally overridden by plusargs)
     reg [8*512-1:0] in_path, hex_path, stream_path, lat_path, trace_path, vcd_path, case_path;
@@ -240,7 +260,7 @@ module tb_tdm_top_filebased;
                 $display("[filebased-tb] ERROR: %0s asks for NUM_CHANNELS = %0d, DATA_WIDTH = %0d but this simulation was elaborated with %0d x %0d.",
                          case_path, file_n, file_w, NUM_CHANNELS, DATA_WIDTH);
                 $display("[filebased-tb]        Write NUM_CHANNELS and DATA_WIDTH before the CH lines, and set the testbench parameters");
-                $display("[filebased-tb]        to the same values (scripts/vivado_single_case.tcl and scripts/run_single_case.py do it for you).");
+                $display("[filebased-tb]        to the same values at the top of this testbench.");
                 sim_done = 1'b1;
                 $finish;
             end
@@ -334,7 +354,6 @@ module tb_tdm_top_filebased;
         reg [3:0] nib;
         begin
             read_message_case;
-            if (trace_path == "none") trace_path = "rtl_result.txt";
             fd_tr = $fopen(trace_path, "w");
             if (fd_tr == 0) begin
                 $display("[filebased-tb] ERROR: cannot open %0s", trace_path);
@@ -343,7 +362,7 @@ module tb_tdm_top_filebased;
             end
             last = n_frames * FRAME + 1;               // cycle in which the last word reaches its output
 
-            $fdisplay(fd_tr, "# TDM single-case result");
+            $fdisplay(fd_tr, "# TDM case result");
             $fdisplay(fd_tr, "# source       : RTL simulation (tdm_top)");
             $fdisplay(fd_tr, "# NUM_CHANNELS : %0d", NUM_CHANNELS);
             $fdisplay(fd_tr, "# DATA_WIDTH   : %0d bits per slot", DATA_WIDTH);
@@ -453,8 +472,8 @@ module tb_tdm_top_filebased;
         for (idx = 0; idx < MAX_VECTORS; idx = idx + 1)
             vectors[idx] = {VW{1'bx}};      // sentinel: "not filled by the file"
 
-        if (case_path != "none")
-            run_message_case;                              // ONE case from a text file; ends with $finish
+        if (RUN_CASE)
+            run_message_case;                              // ONE case from input/input_vectors.txt; ends with $finish
 
         $readmemh(in_path, vectors);
 

@@ -1,0 +1,20 @@
+// =============================================================
+// The ONE case that the RTL testbench (techbench/tb_tdm_top_filebased.v)
+// and the golden model (golden_model/golden_model.py) both read.
+// To run another case: copy a case from input/test_cases.txt over the
+// lines below, and set NUM_CHANNELS / DATA_WIDTH in the testbench to the
+// same values. Results: results/rtl_result.txt and results/golden_result.txt
+//
+// NUM_CHANNELS = number of devices (channels)
+// DATA_WIDTH   = bits sent per channel in one time slot
+// CHi          = the whole message of device i, hex digits without 0x.
+//                It is cut into DATA_WIDTH-bit slots; frame f sends slot f
+//                of CH0, CH1, ... in turn. A finished channel sends 0.
+// =============================================================
+// CASE 2: four devices, messages of different lengths, 1 byte per slot
+NUM_CHANNELS = 4
+DATA_WIDTH   = 8
+CH0 = 0123456789abcdef
+CH1 = deadbeef
+CH2 = cafe
+CH3 = 5a
