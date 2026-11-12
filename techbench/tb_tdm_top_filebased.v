@@ -228,6 +228,59 @@ module tb_tdm_top_filebased;
     integer              n_frames;
     integer              fd_tr;
 
+    // ---------------------------------------------------------
+    // Waveform view, one scope per channel: CH[0], CH[1], ...
+    // (Vivado: Scope window -> tb_tdm_top_filebased -> CH[0] ->
+    //  select all objects -> Add to Wave Window)
+    //   sent        slot the device presents now (= its slice of ch_in)
+    //   received    word on the output now (= its slice of ch_out)
+    //   expected    original slot from the input file that the output must
+    //               hold now (0 after the message is finished)
+    //   ok          1 while received == expected
+    //   message_in  whole message of the device, as its slots side by side
+    //   message_out slots received so far, side by side
+    //   message_ok  1 once the whole message arrived unchanged
+    // all_ok / all_messages_ok: the same for every channel at once.
+    // Messages longer than MSG_VIEW_BITS show their last MSG_VIEW_BITS bits.
+    // ---------------------------------------------------------
+    parameter  MSG_VIEW_BITS = 128;
+    reg  [VW-1:0]                       exp_out = {VW{1'b0}};
+    reg  [NUM_CHANNELS*MSG_VIEW_BITS-1:0] msg_in_v  = 0;
+    reg  [NUM_CHANNELS*MSG_VIEW_BITS-1:0] msg_out_v = 0;
+    integer                             exp_cnt [0:NUM_CHANNELS-1];
+    integer                             ec;
+    wire [NUM_CHANNELS-1:0]             ok_v, msg_ok_v;
+    wire all_ok          = &ok_v;
+    wire all_messages_ok = &msg_ok_v;
+
+    // demux writes ch_out on the clock edge after word_done: expected changes on the same edge
+    always @(posedge clk) begin
+        if (rst) begin
+            for (ec = 0; ec < NUM_CHANNELS; ec = ec + 1) exp_cnt[ec] = 0;
+            exp_out <= {VW{1'b0}};
+        end else if (RUN_CASE && DUT.word_done === 1'b1) begin
+            ec = DUT.demux_select;
+            exp_out[(NUM_CHANNELS-1-ec)*DATA_WIDTH +: DATA_WIDTH] <=
+                (exp_cnt[ec] < n_slots[ec]) ? slot_mem[ec*MAX_SLOTS + exp_cnt[ec]] : {DATA_WIDTH{1'b0}};
+            exp_cnt[ec] = exp_cnt[ec] + 1;
+        end
+    end
+
+    genvar gc;
+    generate
+        for (gc = 0; gc < NUM_CHANNELS; gc = gc + 1) begin : CH
+            wire [DATA_WIDTH-1:0]    sent        = ch_in  [(NUM_CHANNELS-1-gc)*DATA_WIDTH +: DATA_WIDTH];
+            wire [DATA_WIDTH-1:0]    received    = ch_out [(NUM_CHANNELS-1-gc)*DATA_WIDTH +: DATA_WIDTH];
+            wire [DATA_WIDTH-1:0]    expected    = exp_out[(NUM_CHANNELS-1-gc)*DATA_WIDTH +: DATA_WIDTH];
+            wire                     ok          = (received === expected);
+            wire [MSG_VIEW_BITS-1:0] message_in  = msg_in_v [gc*MSG_VIEW_BITS +: MSG_VIEW_BITS];
+            wire [MSG_VIEW_BITS-1:0] message_out = msg_out_v[gc*MSG_VIEW_BITS +: MSG_VIEW_BITS];
+            wire                     message_ok  = (message_out === message_in);
+            assign ok_v[gc]     = ok;
+            assign msg_ok_v[gc] = message_ok;
+        end
+    endgenerate
+
     // ASCII hex digit -> {invalid, value}
     function [4:0] hex_nibble;
         input [7:0] c;
@@ -385,7 +438,14 @@ module tb_tdm_top_filebased;
             $fdisplay(fd_tr, "# [2] cycle-by-cycle trace: ch / bit = channel and bit number on TDM_DATA (MSB first)");
             $fdisplay(fd_tr, "# cycle  time_ns  frame  ch  bit  TDM_DATA  | outputs during this cycle");
 
-            for (c = 0; c < NUM_CHANNELS; c = c + 1) rx_count[c] = 0;
+            for (c = 0; c < NUM_CHANNELS; c = c + 1) begin
+                rx_count[c] = 0;
+                msg_out_v[c*MSG_VIEW_BITS +: MSG_VIEW_BITS] = 0;               // waveform view
+                msg_in_v [c*MSG_VIEW_BITS +: MSG_VIEW_BITS] = 0;
+                for (s = 0; s < n_slots[c]; s = s + 1)
+                    msg_in_v[c*MSG_VIEW_BITS +: MSG_VIEW_BITS] =
+                        (msg_in_v[c*MSG_VIEW_BITS +: MSG_VIEW_BITS] << DATA_WIDTH) | slot_mem[c*MAX_SLOTS + s];
+            end
             rst = 1'b1;
             apply_frame(0);                            // CH0 slot 0 is preloaded during reset
             repeat (2) @(posedge clk);
@@ -399,6 +459,10 @@ module tb_tdm_top_filebased;
                 if (pend >= 0) begin
                     rx_mem  [pend*MAX_SLOTS + rx_count[pend]] = ch_out[(NUM_CHANNELS-1-pend)*DATA_WIDTH +: DATA_WIDTH];
                     rx_cycle[pend*MAX_SLOTS + rx_count[pend]] = n;
+                    if (rx_count[pend] < n_slots[pend])                          // waveform view
+                        msg_out_v[pend*MSG_VIEW_BITS +: MSG_VIEW_BITS] =
+                            (msg_out_v[pend*MSG_VIEW_BITS +: MSG_VIEW_BITS] << DATA_WIDTH)
+                            | ch_out[(NUM_CHANNELS-1-pend)*DATA_WIDTH +: DATA_WIDTH];
                     rx_count[pend] = rx_count[pend] + 1;
                 end
                 pend = (DUT.word_done === 1'b1) ? DUT.demux_select : -1;

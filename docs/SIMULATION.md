@@ -138,6 +138,13 @@ In Vivado add `DUT/u_counter/channel_select`, `DUT/u_counter/bit_index`, `TDM_DA
 `DUT/demux_select` and `ch_out` (radix hexadecimal) to the waveform, then `restart` and `run all`. If the waveform
 shows only X, it is zoomed on the first picoseconds: use **Zoom Fit**.
 
+Per channel, the testbench has one scope `CH[0]`, `CH[1]`, ... (Scope window → `tb_tdm_top_filebased` → `CH[0]` →
+select all objects → Add to Wave Window): `sent` (slot the device presents), `received` (its output), `expected`
+(original slot from the input file that the output must hold now), `ok` (1 while `received == expected`),
+`message_in` / `message_out` (whole message and the slots received so far) and `message_ok`. `all_ok` and
+`all_messages_ok` cover every channel; `all_messages_ok` goes to 1 when the last slot arrives (2345 ns for the
+example). A received slot appears N x W + 1 cycles after its frame starts, so `received` lags `sent` by one frame.
+
 The vector regression of section 3 uses the same testbench with `RUN_CASE = 0`; `run_verification.py` sets it.
 
 ## 5. Synthesis (optional, Vivado)
