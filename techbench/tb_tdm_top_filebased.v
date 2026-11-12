@@ -137,7 +137,14 @@ module tb_tdm_top_filebased;
     wire [VW-1:0] ch_out;    // {CH0_OUT, CH1_OUT, ...}
     wire          TDM_DATA;
 
-    always #(CLK_PERIOD/2) clk = ~clk;
+    // The clock stops when the run is over (sim_done = 1). In the Vivado GUI a
+    // short case can reach $finish inside the first 1000 ns of
+    // launch_simulation; a following "run all" then returns at once instead
+    // of running a free clock forever.
+    reg sim_done = 1'b0;
+    initial begin
+        while (!sim_done) #(CLK_PERIOD/2) clk = ~clk;
+    end
 
     tdm_top #(.NUM_CHANNELS(NUM_CHANNELS), .DATA_WIDTH(DATA_WIDTH)) DUT (
         .clk      (clk),
@@ -451,6 +458,7 @@ module tb_tdm_top_filebased;
         else              $display(" >>> CO %0d VECTOR FAILED - xem chi tiet [FAIL] phia tren", errors);
         $display(" ket qua chi tiet da ghi vao: %0s | %0s | %0s", hex_path, stream_path, lat_path);
         $display("======================================================");
+        sim_done = 1'b1;
         $finish;
     end
 
