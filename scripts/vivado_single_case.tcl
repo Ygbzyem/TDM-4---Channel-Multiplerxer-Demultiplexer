@@ -43,8 +43,42 @@ file mkdir $out_dir
 puts "Case file : $case_file ($tdm_n channels x $tdm_w bits)"
 puts "Results in: $out_dir"
 
-# ---- configure the simulation: top, parameters, file paths
+# ---- the project must use the parameterized sources of this repository
 set sim_fs [get_filesets sim_1]
+set tdm_problems {}
+set tdm_checks [list \
+    "simulation source" sim_1     tb_tdm_top_filebased.v [file join $tdm_repo techbench tb_tdm_top_filebased.v] \
+    "design source"     sources_1 tdm_top.v              [file join $tdm_repo src tdm_top.v]]
+foreach {kind fs name want} $tdm_checks {
+    set found ""
+    foreach f [get_files -quiet -of_objects [get_filesets $fs]] {
+        if {[file tail $f] eq $name} { set found $f }
+    }
+    if {$found eq ""} {
+        lappend tdm_problems "$name is not a $kind of this project"
+        continue
+    }
+    set fh [open $found r]
+    set txt [read $fh]
+    close $fh
+    if {![string match *NUM_CHANNELS* $txt]} {
+        lappend tdm_problems "the project uses an old $name (no NUM_CHANNELS parameter): $found"
+    }
+}
+if {[llength $tdm_problems]} {
+    foreach p $tdm_problems { puts "PROBLEM: $p" }
+    puts "Use the files of the repository $tdm_repo. In this Tcl console:"
+    puts "  remove_files \[get_files -of_objects \[get_filesets sources_1\] *.v\]"
+    puts "  remove_files \[get_files -quiet -of_objects \[get_filesets sim_1\] *.v\]"
+    puts "  add_files -norecurse \[glob $tdm_repo/src/*.v\]"
+    puts "  add_files -fileset sim_1 -norecurse \[list $tdm_repo/techbench/tb_tdm_top_filebased.v $tdm_repo/techbench/tb_tdm_top.v\]"
+    puts "  update_compile_order -fileset sources_1"
+    puts "  update_compile_order -fileset sim_1"
+    puts "then source this script again."
+    error "the Vivado project does not use the parameterized sources (see PROBLEM lines above)"
+}
+
+# ---- configure the simulation: top, parameters, file paths
 set_property top tb_tdm_top_filebased $sim_fs
 set_property generic "NUM_CHANNELS=$tdm_n DATA_WIDTH=$tdm_w" $sim_fs
 set sim_opts [join [list \
