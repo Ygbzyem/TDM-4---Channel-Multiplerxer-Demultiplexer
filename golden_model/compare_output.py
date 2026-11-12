@@ -2,10 +2,10 @@
 
 For EVERY test vector in the input .hex file this script checks:
 
-  1. BIT STREAM  - the 32 bits the RTL put on TDM_DATA (one full frame,
+  1. BIT STREAM  - the N*W bits the RTL put on TDM_DATA (one full frame,
                    captured from bit_count == 0) equal, cycle by cycle,
                    the stream produced by golden_model.serialize().
-  2. OUTPUTS     - the settled CH0_OUT..CH3_OUT written by the RTL equal the
+  2. OUTPUTS     - the settled channel outputs written by the RTL equal the
                    channels the golden model recovers.
   3. LATENCY     - the latency measured by the RTL testbench is inside the
                    architecture's worst-case bound (latency_checker.py).
@@ -16,6 +16,10 @@ Inputs  (written by techbench/tb_tdm_top_filebased.v):
     verification_logs/rtl_latency_<tag>.txt
 Output: verification_logs/verification_report[_<tag>].md   (real results)
 
+Every input line is one packed vector {CH0, CH1, ..., CH(N-1)} of N*W bits
+(CH0 in the most significant bits), the same packing as the RTL ports ch_in /
+ch_out. Default size 4 x 8; other sizes: --channels N --width W.
+
 Works from any directory. Exit code: 0 = all PASS, 1 = at least one FAIL.
 """
 
@@ -25,7 +29,7 @@ from pathlib import Path
 
 from golden_model import TDMGoldenModel
 from timing_checker import check_frame_length
-from latency_checker import check_latency, report_latency
+from latency_checker import check_latency, max_latency, report_latency
 from report_generator import write_report
 
 HERE = Path(__file__).resolve().parent
@@ -74,19 +78,29 @@ def read_lines(path):
     return lines
 
 
-def split_channels(word):
-    return (
-        (word >> 24) & 0xFF,
-        (word >> 16) & 0xFF,
-        (word >> 8) & 0xFF,
-        word & 0xFF,
-    )
+def split_channels(word, num_channels=4, data_width=8):
+    """Packed {CH0, CH1, ...} -> (CH0, CH1, ...); CH0 is the most significant word."""
+    mask = (1 << data_width) - 1
+    return tuple((word >> ((num_channels - 1 - i) * data_width)) & mask for i in range(num_channels))
+
+
+def pack_channels(words, data_width=8):
+    value = 0
+    for w in words:
+        value = (value << data_width) | w
+    return value
+
+
+def vector_hex(value, num_channels=4, data_width=8):
+    """Same text as the testbench's %h of an N*W-bit vector."""
+    return format(value, f"0{-(-num_channels * data_width // 4)}x")
 
 
 def compare_vector(index, in_hex, rtl_stream, rtl_out, latency, gm):
     """Compare ONE vector against the golden model. Returns a result dict."""
 
-    chs = split_channels(int(in_hex, 16))
+    n, w = gm.num_channels, gm.data_width
+    chs = split_channels(int(in_hex, 16), n, w)
     golden = gm.run_frame(*chs)
     golden_stream = golden["stream"]
 
@@ -94,7 +108,7 @@ def compare_vector(index, in_hex, rtl_stream, rtl_out, latency, gm):
     bad_cycle = None
     expected_bit = actual_bit = None
 
-    if not check_frame_length(golden_stream, verbose=False):
+    if not check_frame_length(golden_stream, verbose=False, frame_bits=gm.frame_cycles):
         bad_cycle = 0                          # golden model itself is broken
 
     for cycle in range(max(len(golden_stream), len(rtl_stream))):
@@ -105,16 +119,19 @@ def compare_vector(index, in_hex, rtl_stream, rtl_out, latency, gm):
             break
 
     # --- 2) settled outputs ------------------------------------------
-    golden_out = "{:02x}{:02x}{:02x}{:02x}".format(
-        golden["ch0_out"], golden["ch1_out"], golden["ch2_out"], golden["ch3_out"]
-    )
-    out_ok = rtl_out.lower() == golden_out
+    golden_val = pack_channels(golden["outputs"], w)
+    golden_out = vector_hex(golden_val, n, w)
+    try:
+        out_ok = int(rtl_out, 16) == golden_val
+    except ValueError:                         # x / z in the RTL output
+        out_ok = False
 
     stream_ok = bad_cycle is None
 
     return {
         "index": index,
-        "input": in_hex.lower(),
+        "input": vector_hex(int(in_hex, 16), n, w),
+        "channels_in": " ".join(format(c, f"0{-(-w // 4)}x") for c in chs),
         "stream_ok": stream_ok,
         "bad_cycle": bad_cycle,
         "expected_bit": expected_bit,
@@ -130,7 +147,7 @@ def compare_vector(index, in_hex, rtl_stream, rtl_out, latency, gm):
 
 
 def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
-                   excel_file=None, simulator=""):
+                   excel_file=None, simulator="", num_channels=4, data_width=8):
     """Returns True when every check passes. excel_file: also write an .xlsx workbook."""
 
     inputs = read_lines(input_file)
@@ -148,12 +165,14 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
         print("  -> re-run the simulation (the run may have been cut short).")
         return False
 
-    gm = TDMGoldenModel()
+    gm = TDMGoldenModel(num_channels, data_width)
+    size = f"{num_channels} x {data_width}"
 
     print("\n" + "=" * 62)
     print(" RTL vs GOLDEN MODEL")
     print("=" * 62)
     print(f" input vectors : {input_file}")
+    print(f" size          : {size} (frame = {gm.frame_cycles} bits)")
     print(f" vectors       : {n}\n")
 
     results = []
@@ -174,7 +193,7 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
         if not r["out_ok"]:
             print(f"        CHx_OUT golden={r['golden_out']} rtl={r['rtl_out']}")
 
-    latency = check_latency(lats)
+    latency = check_latency(lats, max_latency(num_channels, data_width))
     report_latency(latency)
 
     passed = sum(1 for r in results if r["ok"])
@@ -190,6 +209,8 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
         report_file,
         {
             "input_file": Path(input_file).name,
+            "size": size,
+            "frame_bits": gm.frame_cycles,
             "results": results,
             "latency": latency,
             "all_pass": all_pass,
@@ -200,7 +221,8 @@ def run_comparison(input_file, hex_file, stream_file, lat_file, report_file,
     if excel_file:
         try:
             import export_excel
-            summary = {"input_file": Path(input_file).name, "results": results,
+            summary = {"input_file": Path(input_file).name, "size": size,
+                       "frame_bits": gm.frame_cycles, "results": results,
                        "latency": latency, "all_pass": all_pass}
             try:
                 written = export_excel.write_excel(excel_file, summary, simulator)
@@ -226,10 +248,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--vectors", default=str(DEFAULT_INPUT),
                     help="input .hex file the RTL was simulated with")
+    ap.add_argument("--channels", type=int, default=4, help="NUM_CHANNELS (default 4)")
+    ap.add_argument("--width", type=int, default=8, help="DATA_WIDTH (default 8)")
     args = ap.parse_args(argv)
 
     p = default_paths(args.vectors)
-    ok = run_comparison(args.vectors, p["hex"], p["stream"], p["lat"], p["report"])
+    ok = run_comparison(args.vectors, p["hex"], p["stream"], p["lat"], p["report"],
+                        num_channels=args.channels, data_width=args.width)
     return 0 if ok else 1
 
 
