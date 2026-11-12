@@ -11,6 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from compare_output import pack_channels, split_channels, vector_hex
 from golden_model import TDMGoldenModel
 
 HERE = Path(__file__).resolve().parent
@@ -27,17 +28,13 @@ def read_hex_file(filename):
         return [line.split("//")[0].strip().lower() for line in f if line.split("//")[0].strip()]
 
 
-def golden_expected(in_hex):
-    word = int(in_hex, 16)
-    r = TDMGoldenModel().run_frame(
-        (word >> 24) & 0xFF, (word >> 16) & 0xFF, (word >> 8) & 0xFF, word & 0xFF
-    )
-    return "{:02x}{:02x}{:02x}{:02x}".format(
-        r["ch0_out"], r["ch1_out"], r["ch2_out"], r["ch3_out"]
-    )
+def golden_expected(in_hex, num_channels=4, data_width=8):
+    chs = split_channels(int(in_hex, 16), num_channels, data_width)
+    r = TDMGoldenModel(num_channels, data_width).run_frame(*chs)
+    return vector_hex(pack_channels(r["outputs"], data_width), num_channels, data_width)
 
 
-def compare_files(input_file, output_file):
+def compare_files(input_file, output_file, num_channels=4, data_width=8):
     inputs = read_hex_file(input_file)
     actual = read_hex_file(output_file)
 
@@ -49,7 +46,7 @@ def compare_files(input_file, output_file):
     print("=" * 60)
 
     for i in range(total):
-        exp = golden_expected(inputs[i]) if i < len(inputs) else "<missing>"
+        exp = golden_expected(inputs[i], num_channels, data_width) if i < len(inputs) else "<missing>"
         act = actual[i] if i < len(actual) else "<missing>"
         ok = exp == act
         errors += 0 if ok else 1
@@ -65,8 +62,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=(__doc__ or "").strip().split("\n")[0])
     ap.add_argument("--input", default=str(ROOT / "input" / "input_vectors.hex"))
     ap.add_argument("--output", default=str(HERE / "verification_logs" / "rtl_output_vectors.hex"))
+    ap.add_argument("--channels", type=int, default=4, help="NUM_CHANNELS (default 4)")
+    ap.add_argument("--width", type=int, default=8, help="DATA_WIDTH (default 8)")
     args = ap.parse_args(argv)
-    return 0 if compare_files(args.input, args.output) else 1
+    return 0 if compare_files(args.input, args.output, args.channels, args.width) else 1
 
 
 if __name__ == "__main__":
