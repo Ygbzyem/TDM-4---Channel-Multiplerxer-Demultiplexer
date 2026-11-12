@@ -14,18 +14,14 @@ module tb_tdm_top;
 
     always #5 clk = ~clk;
 
-    tdm_top DUT (
+    // tdm_top is parameterized; this testbench checks the default 4 x 8 configuration.
+    // The buses are packed {CH0, CH1, CH2, CH3} (channel 0 = most significant byte).
+    tdm_top #(.NUM_CHANNELS(4), .DATA_WIDTH(8)) DUT (
         .clk      (clk),
         .rst      (rst),
-        .CH0      (CH0),
-        .CH1      (CH1),
-        .CH2      (CH2),
-        .CH3      (CH3),
+        .ch_in    ({CH0, CH1, CH2, CH3}),
         .TDM_DATA (TDM_DATA),
-        .CH0_OUT  (CH0_OUT),
-        .CH1_OUT  (CH1_OUT),
-        .CH2_OUT  (CH2_OUT),
-        .CH3_OUT  (CH3_OUT)
+        .ch_out   ({CH0_OUT, CH1_OUT, CH2_OUT, CH3_OUT})
     );
 
     task check_channel(input [7:0] expected, input [7:0] actual, input [255:0] label);
