@@ -137,7 +137,7 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 │   ├── run_tests.py             #   runs every self-checking testbench
 │   └── synth.tcl                #   Vivado batch synthesis + implementation, utilization/timing reports
 ├── constraint/constraints.xdc   # clock constraint (pin assignments pending a target board)
-├── image/                       # block diagrams
+├── image/                       # system diagram (Project_diagram.png), module diagrams (modules/*.png)
 ├── docs/                        # SIMULATION.md, golden_vs_rtl.md (line-by-line mapping) and design notes
 ├── LICENSE
 └── README.md
@@ -149,14 +149,14 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 
 All modules take the parameters `NUM_CHANNELS` and/or `DATA_WIDTH` (defaults 4 and 8).
 
-| # | Module | File | Role |
-|---|--------|------|------|
-| 1 | `tdm_counter` | `tdm_counter.v` | The system's single timing source: `bit_index` (0 … `DATA_WIDTH`−1) and `channel_select` (0 … `NUM_CHANNELS`−1). Also outputs the frame position `bit_count` for the testbenches. |
-| 2 | `tdm_mux` | `tdm_mux.v` | Combinational N-to-1 MUX. Selects the active channel's word for serialization. |
-| 3 | `tx_shift_reg` | `tx_shift_reg.v` | Parallel-to-serial shift register, MSB-first. Loads a new word on `load`, otherwise shifts left once per clock. |
-| 4 | `rx_shift_reg` | `rx_shift_reg.v` | Serial-to-parallel shift register, MSB-first. Shifts continuously; on `word_boundary` it latches the word into `rx_data` and pulses `word_done`. |
-| 5 | `tdm_demux` | `tdm_demux.v` | Writes the completed word into the selected channel of `ch_out`, gated by `word_done`. |
-| 6 | `tdm_top` | `tdm_top.v` | Top-level integration: instantiates the five modules above plus the glue logic that derives correctly-phased `mux_select` / `load` / `word_boundary` / `demux_select` from the counter outputs. |
+| # | Module | File | Role | Ports and diagram |
+|---|--------|------|------|------|
+| 1 | `tdm_counter` | `tdm_counter.v` | The system's single timing source: `bit_index` (0 … `DATA_WIDTH`−1) and `channel_select` (0 … `NUM_CHANNELS`−1). Also outputs the frame position `bit_count` for the testbenches. | [7.1](#71-tdm_counter) |
+| 2 | `tdm_mux` | `tdm_mux.v` | Combinational N-to-1 MUX. Selects the active channel's word for serialization. | [7.2](#72-tdm_mux) |
+| 3 | `tx_shift_reg` | `tx_shift_reg.v` | Parallel-to-serial shift register, MSB-first. Loads a new word on `load`, otherwise shifts left once per clock. | [7.3](#73-tx_shift_reg) |
+| 4 | `rx_shift_reg` | `rx_shift_reg.v` | Serial-to-parallel shift register, MSB-first. Shifts continuously; on `word_boundary` it latches the word into `rx_data` and pulses `word_done`. | [7.4](#74-rx_shift_reg) |
+| 5 | `tdm_demux` | `tdm_demux.v` | Writes the completed word into the selected channel of `ch_out`, gated by `word_done`. | [7.5](#75-tdm_demux) |
+| 6 | `tdm_top` | `tdm_top.v` | Top-level integration: instantiates the five modules above plus the glue logic that derives correctly-phased `mux_select` / `load` / `word_boundary` / `demux_select` from the counter outputs. | [7.6](#76-tdm_top) |
 
 ---
 
@@ -180,29 +180,88 @@ worked examples are in [docs/tdm_top.md](docs/tdm_top.md).
 
 ## 7. Interface Specifications
 
-`N` = `NUM_CHANNELS`, `W` = `DATA_WIDTH`, `CW` = bits needed for 0 … N−1, `BW` = bits needed for 0 … W−1
-(both at least 1; 2 and 3 for the default 4 × 8). All resets are synchronous and active-high.
+`N` = `NUM_CHANNELS`, `W` = `DATA_WIDTH`. `CW`, `BW`, `FW` = bits needed to count 0 … N−1, 0 … W−1 and 0 … N·W−1 (at least 1;
+for the default 4 × 8: 2, 3 and 5). The width column gives the general width and the value for 4 × 8. All resets are
+synchronous and active-high. The diagrams show each module as a black box with its ports.
 
-### 7.1 `tdm_top`
+### 7.1 `tdm_counter`
 
-| Port | Direction | Width | Description |
+![tdm_counter block diagram](image/modules/tdm_counter.png)
+
+| Port | Direction | Width (4 × 8) | Description |
 |---|---|---|---|
-| `clk`, `rst` | Input | 1 | Shared clock, synchronous active-high reset |
-| `ch_in` | Input | N×W | Parallel input channels packed `{CH0, CH1, …, CH(N−1)}`, channel 0 = most significant word (default 4 × 8: `{CH0, CH1, CH2, CH3}`) |
-| `TDM_DATA` | Output | 1 | Serial line, MSB of each word first |
-| `ch_out` | Output | N×W | Reconstructed channels, same packing as `ch_in` |
+| `clk` | Input | 1 | Shared clock; every register of the system works on its rising edge |
+| `rst` | Input | 1 | Synchronous, active-high reset; clears `bit_index` and `channel_select` to 0 |
+| `bit_index` | Output | BW (3) | Position of the bit inside the current word, counts 0 → W−1 and wraps; `bit_index == W−1` marks the last bit of a word |
+| `channel_select` | Output | CW (2) | Channel slot now on the wire, 0 → N−1; increases by 1 each time `bit_index` wraps. Raw value: it is not fed directly to `tdm_mux` / `tdm_demux` (see [Section 6](#6-timing-contract-glue-layer-in-tdm_top)) |
+| `bit_count` | Output | FW (5) | Position inside the frame, `channel_select × W + bit_index` (0 → N·W−1; for 4 × 8 the old 5-bit `bit_count`). Used by the testbenches only; not used in `tdm_top`, so synthesis removes it |
 
-### 7.2 Sub-modules
+One frame = N·W clock cycles (32 for 4 × 8). The counters compare with W−1 and N−1, so N and W need not be powers of two.
 
-| Module | Port | Direction | Width | Description |
-|---|---|---|---|---|
-| `tdm_counter` | `bit_index` | Output | BW | Bit position inside the current word, 0 … W−1 |
-| | `channel_select` | Output | CW | Current channel slot, 0 … N−1 (raw; not fed directly to mux/demux) |
-| | `bit_count` | Output | — | Position inside the frame, `channel_select × W + bit_index` (testbench use only) |
-| `tdm_mux` | `ch_in` / `channel_select` / `mux_out` | In / In / Out | N×W / CW / W | Selected channel's word (combinational) |
-| `tx_shift_reg` | `mux_out`, `load` / `serial_out` | In / Out | W, 1 / 1 | Load on `load`, else shift left; `serial_out = tx_shift[W−1]` |
-| `rx_shift_reg` | `serial_data`, `word_boundary` / `rx_data`, `word_done` | In / Out | 1, 1 / W, 1 | Latch the word on `word_boundary`; `word_done` is a 1-clock pulse one cycle later |
-| `tdm_demux` | `rx_data`, `channel_select`, `word_done` / `ch_out` | In / Out | W, CW, 1 / N×W | Writes only when `word_done` = 1; other channels hold |
+### 7.2 `tdm_mux`
+
+![tdm_mux block diagram](image/modules/tdm_mux.png)
+
+| Port | Direction | Width (4 × 8) | Description |
+|---|---|---|---|
+| `ch_in` | Input | N·W (32) | The N parallel input channels, packed `{CH0, CH1, …, CH(N−1)}`; CH0 is the most significant word, `ch_in[N·W−1 -: W]` |
+| `channel_select` | Input | CW (2) | Which channel to send: 0 → CH0, 1 → CH1, …, N−1 → CH(N−1). In `tdm_top` it is driven by the look-ahead `mux_select` |
+| `mux_out` | Output | W (8) | Word of the selected channel (combinational); 0 if `channel_select` ≥ N, so no latch is inferred |
+
+### 7.3 `tx_shift_reg`
+
+![tx_shift_reg block diagram](image/modules/tx_shift_reg.png)
+
+| Port | Direction | Width (4 × 8) | Description |
+|---|---|---|---|
+| `clk` | Input | 1 | Shared clock |
+| `rst` | Input | 1 | Synchronous, active-high reset; **preloads** `mux_out` (CH0's word) instead of clearing, so CH0 is the first word on the wire |
+| `mux_out` | Input | W (8) | Word to send, from `tdm_mux` |
+| `load` | Input | 1 | High in the last cycle of a word (`bit_index == W−1`); the next word is captured on that clock edge |
+| `serial_out` | Output | 1 | `tx_shift[W−1]`, the current MSB; this is `TDM_DATA` |
+
+Priority inside the always block: **RESET > LOAD > SHIFT** (shift left, a 0 enters at the LSB).
+
+### 7.4 `rx_shift_reg`
+
+![rx_shift_reg block diagram](image/modules/rx_shift_reg.png)
+
+| Port | Direction | Width (4 × 8) | Description |
+|---|---|---|---|
+| `clk` | Input | 1 | Shared clock |
+| `rst` | Input | 1 | Synchronous, active-high reset; clears the shift register, `rx_data` and `word_done` |
+| `serial_data` | Input | 1 | Bit on the wire (`TDM_DATA`), shifted in MSB first on every clock |
+| `word_boundary` | Input | 1 | Same timing as `load`: high while the last bit of a word is on the wire |
+| `rx_data` | Output | W (8) | Received word `{rx_shift[W−2:0], serial_data}`, latched on the clock edge that ends the word |
+| `word_done` | Output | 1 | One-clock pulse, high in the cycle after `word_boundary`; tells `tdm_demux` that `rx_data` is new |
+
+### 7.5 `tdm_demux`
+
+![tdm_demux block diagram](image/modules/tdm_demux.png)
+
+| Port | Direction | Width (4 × 8) | Description |
+|---|---|---|---|
+| `clk` | Input | 1 | Shared clock |
+| `rst` | Input | 1 | Synchronous, active-high reset; clears every output word to 0 |
+| `rx_data` | Input | W (8) | Completed word from `rx_shift_reg` |
+| `channel_select` | Input | CW (2) | Which output word to write; in `tdm_top` this is `demux_select` (`channel_select` delayed by one clock) |
+| `word_done` | Input | 1 | Write enable: the selected channel is updated only when it is 1 |
+| `ch_out` | Output | N·W (32) | Received channels, same packing as `ch_in`; the channels that are not selected keep their value |
+
+### 7.6 `tdm_top`
+
+![tdm_top block diagram](image/modules/tdm_top.png)
+
+| Port | Direction | Width (4 × 8) | Description |
+|---|---|---|---|
+| `clk` | Input | 1 | Shared clock (100 MHz in `constraints.xdc`) |
+| `rst` | Input | 1 | Synchronous, active-high reset of the whole system |
+| `ch_in` | Input | N·W (32) | Parallel input channels `{CH0, CH1, …, CH(N−1)}` (4 × 8: `{CH0, CH1, CH2, CH3}`, e.g. `a53cf05a` → CH0 = a5 … CH3 = 5a) |
+| `TDM_DATA` | Output | 1 | The serial line: one bit per clock, channel after channel, MSB of each word first |
+| `ch_out` | Output | N·W (32) | Reconstructed channels, same packing as `ch_in`; slot f of channel c appears in cycle f·N·W + (c+1)·W + 1 |
+
+Parameters are set on the instance: `tdm_top #(.NUM_CHANNELS(4), .DATA_WIDTH(16)) u_tdm (...)`. Internal signals of the glue
+layer (`mux_select`, `load`, `word_boundary`, `demux_select`) are described in [Section 6](#6-timing-contract-glue-layer-in-tdm_top).
 
 ---
 
