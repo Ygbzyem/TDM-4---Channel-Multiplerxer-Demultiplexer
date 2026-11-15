@@ -153,7 +153,7 @@ def read_case(path):
     """Return (num_channels, data_width, [message of CH0, CH1, ...]); messages are hex strings."""
     n = w = None
     chans = {}
-    for no, raw in enumerate(Path(path).read_text().splitlines(), 1):
+    for no, raw in enumerate(Path(path).read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         line = raw.split("//")[0].strip()
         if not line:
             continue

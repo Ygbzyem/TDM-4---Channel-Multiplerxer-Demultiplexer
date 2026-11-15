@@ -58,7 +58,7 @@ def case_text(n, w, messages, title=""):
 def cases_from_library(path):
     """Split input/test_cases.txt into cases: a case ends with its last CH line."""
     cases, cur = [], []
-    for raw in Path(path).read_text().splitlines():
+    for raw in Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
         line = raw.split("//")[0].strip()
         if not line:
             continue
@@ -201,7 +201,8 @@ def compare_files(rtl_file, golden_file):
     """(ok, text of the first difference); the '# source' line is skipped."""
     if not Path(rtl_file).exists():
         return False, "no RTL result file"
-    keep = lambda p: [l.rstrip() for l in Path(p).read_text().splitlines() if not l.startswith("# source")]
+    keep = lambda p: [l.rstrip() for l in Path(p).read_text(encoding="utf-8", errors="replace").splitlines()
+                       if not l.startswith("# source")]
     a, b = keep(rtl_file), keep(golden_file)
     for i in range(max(len(a), len(b))):
         x = a[i] if i < len(a) else "<end of file>"

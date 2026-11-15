@@ -1,3 +1,6 @@
+// Library of cases. To run one, copy it (NUM_CHANNELS ... last CH line) into
+// input/input_vectors.txt. All cases are also run by golden_model/run_message_regression.py.
+
 // ---- CASE 1: one slot per device (one byte each), 4 x 8 ----------------
 // Expected: CH0..CH3_OUT = a5, 3c, f0, 5a at cycles 9, 17, 25, 33
 NUM_CHANNELS = 4
@@ -11,10 +14,10 @@ CH3 = 5a
 // CH0 has 8 slots, CH1 4, CH2 2, CH3 1; finished channels send 00
 NUM_CHANNELS = 4
 DATA_WIDTH   = 8
-CH0 = 0123456789abcdef
+CH0 = 89abcdef
 CH1 = deadbeef
-CH2 = cafe
-CH3 = 5a
+CH2 = cafengon
+CH3 = kingof67
 
 // ---- CASE 3: 2 bytes per slot, 4 x 16 (set DATA_WIDTH = 16 in the testbench)
 // CH3 = 5a has 8 bits only: its single slot is padded with 0 (5a00)
