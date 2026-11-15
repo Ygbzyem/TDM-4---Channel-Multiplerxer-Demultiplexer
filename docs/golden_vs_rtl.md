@@ -34,7 +34,7 @@ devices that present the next slot every frame and collects what comes out. The 
 | L92–95 `frames()`: `sl[f] if f < len(sl) else 0` | L484–490 `apply_frame`: `(f < n_slots[c]) ? slot_mem[...] : 0`; L571 next slot in the last cycle of a frame | Frame f carries slot f of every channel; a finished channel sends 0 |
 | L97–102 `rebuild_message()` | L550 collect the word from `ch_out`; L588 rebuild the message | Put the received slots of a channel back together |
 
-## 2. Only in the RTL, and why
+## 3. Only in the RTL, and why
 
 The golden model has no clock, so it can take "the word of the channel now" and "the word that just arrived" directly.
 The RTL registers every step, so each register adds one clock of delay. The glue in `tdm_top.v` exists only to keep
