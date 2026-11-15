@@ -1,0 +1,274 @@
+[
+ {
+  "type": "book",
+  "title": "Digital and Analog Communication Systems",
+  "author": [
+   {
+    "family": "Couch",
+    "given": "Leon W."
+   }
+  ],
+  "edition": "8",
+  "publisher": "Pearson",
+  "issued": {
+   "date-parts": [
+    [
+     2013
+    ]
+   ]
+  },
+  "ISBN": "978-0-13-291538-0",
+  "id": "couch"
+ },
+ {
+  "type": "standard",
+  "title": "Synchronous frame structures used at 1544, 6312, 2048, 8448 and 44 736 kbit/s hierarchical levels",
+  "author": [
+   {
+    "literal": "ITU-T"
+   }
+  ],
+  "number": "Recommendation G.704",
+  "publisher": "International Telecommunication Union",
+  "publisher-place": "Geneva, Switzerland",
+  "issued": {
+   "date-parts": [
+    [
+     1998,
+     10
+    ]
+   ]
+  },
+  "URL": "https://www.itu.int/rec/T-REC-G.704-199810-I/en",
+  "id": "g704"
+ },
+ {
+  "type": "standard",
+  "title": "IEEE Standard for Verilog Hardware Description Language",
+  "author": [
+   {
+    "literal": "IEEE"
+   }
+  ],
+  "number": "IEEE Std 1364-2005",
+  "publisher": "IEEE",
+  "publisher-place": "New York, NY, USA",
+  "issued": {
+   "date-parts": [
+    [
+     2006,
+     4,
+     7
+    ]
+   ]
+  },
+  "URL": "https://standards.ieee.org/standard/1364-2005.html",
+  "id": "ieee1364"
+ },
+ {
+  "type": "paper-conference",
+  "title": "Nonblocking assignments in Verilog synthesis, coding styles that kill",
+  "author": [
+   {
+    "family": "Cummings",
+    "given": "Clifford E."
+   }
+  ],
+  "event-title": "SNUG San Jose 2000",
+  "container-title": "Synopsys Users Group (SNUG) San Jose",
+  "event-place": "San Jose, CA, USA",
+  "issued": {
+   "date-parts": [
+    [
+     2000
+    ]
+   ]
+  },
+  "id": "cummings_nba"
+ },
+ {
+  "type": "paper-conference",
+  "title": "Asynchronous & synchronous reset design techniques - part deux",
+  "author": [
+   {
+    "family": "Cummings",
+    "given": "Clifford E."
+   },
+   {
+    "family": "Mills",
+    "given": "Don"
+   },
+   {
+    "family": "Golson",
+    "given": "Steve"
+   }
+  ],
+  "event-title": "SNUG Boston 2003",
+  "container-title": "Synopsys Users Group (SNUG) Boston",
+  "event-place": "Boston, MA, USA",
+  "issued": {
+   "date-parts": [
+    [
+     2003
+    ]
+   ]
+  },
+  "id": "cummings_reset"
+ },
+ {
+  "type": "book",
+  "title": "SystemVerilog for Verification: A Guide to Learning the Testbench Language Features",
+  "author": [
+   {
+    "family": "Spear",
+    "given": "Chris"
+   },
+   {
+    "family": "Tumbush",
+    "given": "Greg"
+   }
+  ],
+  "edition": "3",
+  "publisher": "Springer",
+  "publisher-place": "New York, NY",
+  "issued": {
+   "date-parts": [
+    [
+     2012
+    ]
+   ]
+  },
+  "DOI": "10.1007/978-1-4614-0715-7",
+  "ISBN": "978-1-4614-0714-0",
+  "id": "spear"
+ },
+ {
+  "type": "software",
+  "title": "Icarus Verilog",
+  "author": [
+   {
+    "family": "Williams",
+    "given": "Stephen"
+   }
+  ],
+  "version": "12.0",
+  "URL": "https://steveicarus.github.io/iverilog/",
+  "id": "icarus"
+ },
+ {
+  "type": "report",
+  "title": "Vivado Design Suite User Guide: Logic Simulation",
+  "author": [
+   {
+    "literal": "Xilinx"
+   }
+  ],
+  "genre": "User Guide",
+  "number": "UG900 (v2020.2)",
+  "publisher": "Xilinx, Inc.",
+  "issued": {
+   "date-parts": [
+    [
+     2020,
+     11,
+     23
+    ]
+   ]
+  },
+  "id": "ug900"
+ },
+ {
+  "type": "report",
+  "title": "Vivado Design Suite User Guide: Synthesis",
+  "author": [
+   {
+    "literal": "Xilinx"
+   }
+  ],
+  "genre": "User Guide",
+  "number": "UG901 (v2020.2)",
+  "publisher": "Xilinx, Inc.",
+  "issued": {
+   "date-parts": [
+    [
+     2021,
+     1,
+     28
+    ]
+   ]
+  },
+  "id": "ug901"
+ },
+ {
+  "type": "report",
+  "title": "7 Series FPGAs Data Sheet: Overview",
+  "author": [
+   {
+    "literal": "Xilinx"
+   }
+  ],
+  "genre": "Data Sheet",
+  "number": "DS180 (v2.6.1)",
+  "publisher": "Xilinx, Inc.",
+  "issued": {
+   "date-parts": [
+    [
+     2020,
+     9,
+     8
+    ]
+   ]
+  },
+  "id": "ds180"
+ },
+ {
+  "type": "report",
+  "title": "Vivado Design Suite User Guide: Design Analysis and Closure Techniques",
+  "author": [
+   {
+    "literal": "Xilinx"
+   }
+  ],
+  "genre": "User Guide",
+  "number": "UG906 (v2020.2)",
+  "publisher": "Xilinx, Inc.",
+  "issued": {
+   "date-parts": [
+    [
+     2021,
+     1,
+     25
+    ]
+   ]
+  },
+  "id": "ug906"
+ },
+ {
+  "type": "software",
+  "title": "TDM 4-Channel Multiplexer/Demultiplexer — Verilog RTL Project",
+  "author": [
+   {
+    "literal": "IC2010 Team 3"
+   }
+  ],
+  "publisher": "GitHub",
+  "issued": {
+   "date-parts": [
+    [
+     2026
+    ]
+   ]
+  },
+  "URL": "https://github.com/Ygbzyem/TDM-4---Channel-Multiplerxer-Demultiplexer",
+  "accessed": {
+   "date-parts": [
+    [
+     2026,
+     11,
+     15
+    ]
+   ]
+  },
+  "id": "repo"
+ }
+]
