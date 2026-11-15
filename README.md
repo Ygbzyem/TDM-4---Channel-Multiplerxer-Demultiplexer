@@ -102,7 +102,7 @@ Non-power-of-two values (for example 3 channels or 12 bits) are supported. Set t
 
 ## 3. Block Diagram
 
-![TDM 4-Channel system block diagram](image/Project_diagram.png)
+![TDM 4-Channel system block diagram](image/Block_diagram.png)
 
 *Data flow: CH0–CH3 → `tdm_mux` (combinational) → `tx_shift_reg` (parallel→serial, MSB-first) → serial
 `TDM_DATA` → `rx_shift_reg` (serial→parallel, MSB-first) → `tdm_demux` (updates an output only when
