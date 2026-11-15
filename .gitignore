@@ -29,3 +29,7 @@ golden_model/verification_logs/message_cases/
 # Vivado project created inside the repository, local Python environment
 TDM/
 .venv/
+
+# Editable Word sources: only the PDF export goes to GitHub
+*.docx
+~$*.docx
